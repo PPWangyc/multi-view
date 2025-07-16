@@ -61,12 +61,12 @@ def main():
             output_view_dir = output_view_dir.resolve()
             print(f"Exporting frames for {view} view to {output_view_dir}")
             # export frames
-            # export_frames(
-            #     video_file=view_video_path,
-            #     frame_idxs=anchor_idxs,
-            #     output_dir=output_view_dir,
-            #     context_frames=0,
-            # )
+            export_frames(
+                video_file=view_video_path,
+                frame_idxs=anchor_idxs,
+                output_dir=output_view_dir,
+                context_frames=0,
+            )
         # save a csv file with the frames_to_label
         csv_path = Path(output_dir) / video_id / "selected_frames.csv"
         np.savetxt(csv_path, frames_to_label, delimiter=",", fmt="%s")
