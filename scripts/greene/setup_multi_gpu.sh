@@ -46,7 +46,7 @@ if [ $num_nodes -gt 1 ]; then
     "
 else
     accelerate_cmd="
-    accelerate launch --config_file config/accelerate/default.yaml \
+    accelerate launch --config_file configs/accelerate/default.yaml \
     --main_process_port $PORT \
     --num_processes $num_gpus \
     --num_machines $num_nodes \

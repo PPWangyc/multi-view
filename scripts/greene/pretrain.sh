@@ -27,8 +27,8 @@ echo "Accelerate command is: $accelerate_cmd"
 
 # Script arguments
 script_args="
-    --model_name_or_path facebook/vit-mae-base
+    --config configs/mae.yaml
 "
-accelerate_cmd $script_path $script_args
+$accelerate_cmd $script_path $script_args
 cd scripts/greene
 conda activate mv

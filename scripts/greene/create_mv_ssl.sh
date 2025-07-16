@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --account=pr_136_tandon_advanced
-#SBATCH --job-name="create_separate-mirror-mouse_ssl"
-#SBATCH --output="create_separate-mirror-mouse_ssl.%j.out"
+#SBATCH --job-name="create_mv_ssl"
+#SBATCH --output="create_mv_ssl.%j.out"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

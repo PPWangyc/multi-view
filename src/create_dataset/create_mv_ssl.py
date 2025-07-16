@@ -9,7 +9,8 @@ from utils.utils import (
     get_video_paths_by_id,
     get_anchor_view_paths,
     get_all_views_for_anchor,
-    get_video_id_from_path
+    get_video_id_from_path,
+    set_seed
 )
 from pathlib import Path
 import numpy as np
@@ -17,6 +18,7 @@ from datetime import datetime
 
 def main():
     args = get_args()
+    set_seed(args.seed)
     dataset = args.dataset
     input_dir = os.path.join(args.input_dir, dataset, 'videos')
     output_dir = os.path.join(args.output_dir, dataset)
@@ -88,7 +90,8 @@ def main():
         "n_digits": n_digits,
         "extension": extension,
         "timestamp": timestamp,
-        "author": args.author
+        "author": args.author,
+        "seed": args.seed
     }
     
     # Save as JSON file

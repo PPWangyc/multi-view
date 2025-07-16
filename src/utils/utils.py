@@ -5,6 +5,13 @@ import random
 import argparse
 from pathlib import Path
 import re
+from models.mae import VisionTransformer, MVVisionTransformer
+
+NAME_MODEL = {
+    'mae': VisionTransformer,
+    'mvmae': MVVisionTransformer,
+    'ijepa': 'facebook/vit-mae-base',
+}
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -15,6 +22,7 @@ def get_args():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--dataset', type=str, default='mirror-mouse-separate')
     parser.add_argument('--author', type=str, default='Yanchen Wang')
+    parser.add_argument('--config', type=str, default='configs/mae.yaml', help='config file (yaml)')
     return parser.parse_args()
 
 def set_seed(seed):
