@@ -3,6 +3,7 @@ from beast.extraction import (
     select_frame_idxs_kmeans
 )
 import os
+import json
 from utils.utils import (
     get_args,
     get_video_paths_by_id,
@@ -58,34 +59,41 @@ def main():
             output_view_dir = output_view_dir.resolve()
             print(f"Exporting frames for {view} view to {output_view_dir}")
             # export frames
-            export_frames(
-                video_file=view_video_path,
-                frame_idxs=anchor_idxs,
-                output_dir=output_view_dir,
-                context_frames=0,
-            )
+            # export_frames(
+            #     video_file=view_video_path,
+            #     frame_idxs=anchor_idxs,
+            #     output_dir=output_view_dir,
+            #     context_frames=0,
+            # )
         # save a csv file with the frames_to_label
         csv_path = Path(output_dir) / video_id / "selected_frames.csv"
         np.savetxt(csv_path, frames_to_label, delimiter=",", fmt="%s")
         
     video_ids = list(video_dict.keys())
     # save information about available views and anchor view into output_dir
-    # add timestamp to the info.txt file
+    # add timestamp to the info.json file
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    with open(Path(output_dir) / "info.txt", "w") as f:
-        f.write(f"Dataset: {dataset}\n")
-        f.write(f"Description: A self-supervised dataset for multi-view learning\n")
-        f.write(f"Available views: {avail_views}\n")
-        f.write(f"Anchor view: {anchor_view}\n")
-        f.write(f"Video IDs: {video_ids}\n")
-        f.write(f"Number of videos: {len(video_ids)}\n")
-        f.write(f"Input directory: {input_dir}\n")
-        f.write(f"Output directory: {output_dir}\n")
-        f.write(f"Frames per video: {frames_per_video}\n")
-        f.write(f"N digits: {n_digits}\n")
-        f.write(f"Extension: {extension}\n")
-        f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"Author: {args.author}\n")
+    
+    # Create a dictionary with all the dataset information
+    dataset_info = {
+        "dataset": dataset,
+        "description": "A self-supervised dataset for multi-view learning",
+        "available_views": avail_views,
+        "anchor_view": anchor_view,
+        "video_ids": video_ids,
+        "number_of_videos": len(video_ids),
+        "input_directory": input_dir,
+        "output_directory": str(output_dir),
+        "frames_per_video": frames_per_video,
+        "n_digits": n_digits,
+        "extension": extension,
+        "timestamp": timestamp,
+        "author": args.author
+    }
+    
+    # Save as JSON file
+    with open(Path(output_dir) / "info.json", "w") as f:
+        json.dump(dataset_info, f, indent=2)
 
 if __name__ == "__main__":
     main()
