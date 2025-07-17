@@ -74,13 +74,7 @@ class MVVisionTransformer(VisionTransformer):
         input_images = batch_dict['input_image']
         output_images = batch_dict['output_image']
         output_views = batch_dict['output_view']
-        print(input_images.shape)
-        print(output_images.shape)
-        print(output_views)
-        exit()
-        output_views = [self.view2idx[view] for view in output_views]
-        # output_views is a list of ints, convert to tensor
-        output_views = torch.tensor(output_views)
+        output_views = torch.tensor([self.view2idx[view] for view in output_views])
         results_dict = self.vit_mae(
             pixel_values=input_images, 
             output_views=output_views, 
@@ -96,6 +90,18 @@ class MultiViewDecoder(ViTMAEDecoder):
         # output_view embeddings
         self.decoder_view_embed = torch.nn.Parameter(torch.randn(config.num_views, 197, config.decoder_hidden_size))
 
+    def get_decoder_view_embed(self, output_views: torch.Tensor) -> torch.Tensor:
+        """
+        Extract decoder view embeddings based on output_views.
+
+        Args:
+            output_views: Tensor of shape [batch_size] containing view indices
+        Returns:
+            decoder_view_embed_: Tensor of shape [batch_size, 197, decoder_hidden_size]
+        """
+        # Index into decoder_view_embed using output_views
+        return self.decoder_view_embed[output_views]
+
     def forward(self, hidden_states, ids_restore, output_views):
         # embed tokens
         x = self.decoder_embed(hidden_states)
@@ -109,8 +115,10 @@ class MultiViewDecoder(ViTMAEDecoder):
         # add pos embed
         decoder_pos_embed = self.decoder_pos_embed
         hidden_states = x + decoder_pos_embed
+        # w
         # add view embeddings
-        hidden_states = hidden_states + self.decoder_view_embed.unsqueeze(0)
+        decoder_view_embed_ = self.get_decoder_view_embed(output_views)
+        hidden_states = hidden_states + decoder_view_embed_
 
         # apply Transformer layers (blocks)
         for i, layer_module in enumerate(self.decoder_layers):

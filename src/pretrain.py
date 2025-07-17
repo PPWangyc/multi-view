@@ -4,12 +4,13 @@ from utils.utils import (
     set_seed,
     get_args,
     NAME_MODEL,
+    plot_example_images,
 )
 from data.datasets import MVDataset
 from utils.log_utils import get_logger
 import torch
 from torch.utils.data import DataLoader
-
+from tqdm import tqdm
 # accelerate
 from accelerate import Accelerator
 
@@ -31,7 +32,7 @@ def main():
     # dataset
     dataset = MVDataset(
         data_dir=config.get('data', {}).get('data_dir'),
-        imgaug_pipeline=imgaug_pipeline_,
+        imgaug_pipeline=None,
     )
     config['model']['model_params']['num_views'] = len(dataset.available_views)
     config['data']['avail_views'] = dataset.available_views
@@ -54,15 +55,28 @@ def main():
         pct_start=config['optimizer']['warmup_pct'],
         final_div_factor=1,
     )
+    model, dataloader, optimizer, scheduler = accelerator.prepare(model, dataloader, optimizer, scheduler)
     # train
     for epoch in range(epochs):
-        for batch in dataloader:
+        model.train()
+        running_loss = 0.
+        pbar = tqdm(dataloader, desc=f'Epoch {epoch+1}')
+        for batch in pbar:
             optimizer.zero_grad()
-            loss = model(batch)
+            results_dict = model(batch)
+            loss = results_dict['loss']
+            running_loss += loss.item()
             loss.backward()
             optimizer.step()
             scheduler.step()
-
+            # Plot example images every 100 steps
+            if pbar.n % 100 == 0 and accelerator.is_main_process:
+                plot_example_images(batch, results_dict, recon_num=8, save_path=f'plots/epoch_{epoch+1}_step_{pbar.n}.png')
+            
+            # Update progress bar with current loss
+            pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+        print(f'Epoch {epoch+1} loss: {running_loss/len(dataloader)}')
+        
 
 if __name__ == '__main__':
     main()
