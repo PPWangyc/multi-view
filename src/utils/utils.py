@@ -61,6 +61,8 @@ def get_args():
     parser.add_argument('--dataset', type=str, default='mirror-mouse-separate')
     parser.add_argument('--author', type=str, default='Yanchen Wang')
     parser.add_argument('--config', type=str, default='configs/mae.yaml', help='config file (yaml)')
+    parser.add_argument('--resume', type=str, default=None, help='path to checkpoint to resume from')
+    parser.add_argument('--resume_from_best', action='store_true', help='resume from best model instead of last model')
     return parser.parse_args()
 
 def set_seed(seed):
@@ -226,10 +228,6 @@ def plot_example_images(batch, results_dict, recon_num=8, save_path=None):
         output_images = output_images.detach().cpu().numpy()
     if torch.is_tensor(recon_images):
         recon_images = recon_images.detach().cpu().numpy()
-    # show the min and max of the images
-    print(f'Input images min: {input_images.min()}, max: {input_images.max()}')
-    print(f'Output images min: {output_images.min()}, max: {output_images.max()}')
-    print(f'Recon images min: {recon_images.min()}, max: {recon_images.max()}')
     
     # Create subplot
     fig, axes = plt.subplots(recon_num, 3, figsize=(12, 4 * recon_num))
@@ -267,4 +265,290 @@ def plot_example_images(batch, results_dict, recon_num=8, save_path=None):
         plt.close()
     else:
         plt.show()
+
+
+def create_log_dir(experiment_name: str, base_dir: str = "logs") -> str:
+    """
+    Create a log directory with timestamp and experiment name.
+    
+    Args:
+        experiment_name (str): Name of the experiment
+        base_dir (str): Base directory for logs, defaults to "logs"
+        
+    Returns:
+        str: Path to the created log directory
+        
+    Example:
+        log_dir = create_log_dir("mae_pretrain")
+        # Returns: "logs/2024_01_15_14_30_25_mae_pretrain"
+    """
+    import datetime
+    
+    # Create timestamp
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    
+    # Create log directory name
+    log_dir_name = f"{timestamp}_{experiment_name}"
+    log_dir_path = os.path.join(base_dir, log_dir_name)
+    
+    # Create directories
+    os.makedirs(log_dir_path, exist_ok=True)
+    os.makedirs(os.path.join(log_dir_path, "checkpoints"), exist_ok=True)
+    os.makedirs(os.path.join(log_dir_path, "plots"), exist_ok=True)
+    
+    return log_dir_path
+
+
+def load_checkpoint_for_resume(checkpoint_path: str, accelerator, model, optimizer, scheduler, logger):
+    """
+    Load checkpoint for resuming training.
+    
+    Args:
+        checkpoint_path (str): Path to the checkpoint file
+        accelerator: Accelerator instance
+        model: Model instance
+        optimizer: Optimizer instance
+        scheduler: Scheduler instance
+        logger: Logger instance
+        
+    Returns:
+        dict: Dictionary containing loaded state information
+    """
+    import json
+    
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    
+    logger.info(f"Loading checkpoint from: {checkpoint_path}")
+    
+    # Load the checkpoint
+    checkpoint = accelerator.load_state(checkpoint_path)
+    
+    # Extract training state information
+    training_state = {
+        'epoch': 0,  # Default values
+        'best_loss': float('inf'),
+        'best_epoch': 0,
+        'global_step': 0
+    }
+    
+    # Try to load training state from a separate file
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    training_state_path = os.path.join(checkpoint_dir, "training_state.json")
+    
+    if os.path.exists(training_state_path):
+        try:
+            with open(training_state_path, 'r') as f:
+                training_state = json.load(f)
+            logger.info(f"Loaded training state: {training_state}")
+        except Exception as e:
+            logger.warning(f"Failed to load training state: {e}")
+    
+    logger.info(f"Successfully loaded checkpoint from {checkpoint_path}")
+    return training_state
+
+
+def save_training_config(config: dict, training_info: dict, log_dir: str, logger=None):
+    """
+    Save training configuration and computed training information to a JSON file.
+    
+    Args:
+        config (dict): Original configuration dictionary
+        training_info (dict): Computed training information (epochs, lr, batch_size, etc.)
+        log_dir (str): Log directory path
+        logger: Logger instance for info messages
+        
+    Returns:
+        str: Path to the saved configuration file
+    """
+    import json
+    import datetime
+    
+    # Create a comprehensive configuration dictionary
+    training_config = {
+        "original_config": config,
+        "computed_training_info": training_info,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "log_directory": log_dir
+    }
+    
+    # Save to JSON file
+    config_path = os.path.join(log_dir, "training_config.json")
+    with open(config_path, 'w') as f:
+        json.dump(training_config, f, indent=2)
+    
+    if logger:
+        logger.info(f"Training configuration saved to: {config_path}")
+    
+    return config_path
+
+
+def save_training_config_summary(training_info: dict, log_dir: str, logger=None):
+    """
+    Save a human-readable summary of training configuration to a text file.
+    
+    Args:
+        training_info (dict): Computed training information
+        log_dir (str): Log directory path
+        logger: Logger instance for info messages
+        
+    Returns:
+        str: Path to the saved summary file
+    """
+    import datetime
+    
+    # Create a readable summary
+    summary_lines = [
+        "=" * 60,
+        "TRAINING CONFIGURATION SUMMARY",
+        "=" * 60,
+        f"Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Experiment: {training_info.get('experiment_name', 'N/A')}",
+        "",
+        "MODEL CONFIGURATION:",
+        f"  Model: {training_info.get('model_name', 'N/A')}",
+        f"  Available Views: {training_info.get('available_views', 'N/A')}",
+        f"  Number of Views: {training_info.get('num_views', 'N/A')}",
+        "",
+        "TRAINING PARAMETERS:",
+        f"  Epochs: {training_info.get('epochs', 'N/A')}",
+        f"  Total Steps: {training_info.get('total_steps', 'N/A')}",
+        f"  Steps per Epoch: {training_info.get('steps_per_epoch', 'N/A')}",
+        f"  Learning Rate: {training_info.get('learning_rate', 'N/A'):.2e}",
+        f"  Weight Decay: {training_info.get('weight_decay', 'N/A')}",
+        f"  Warmup Percentage: {training_info.get('warmup_percentage', 'N/A')}",
+        "",
+        "BATCH SIZE CONFIGURATION:",
+        f"  Global Batch Size: {training_info.get('global_batch_size', 'N/A')}",
+        f"  Local Batch Size: {training_info.get('local_batch_size', 'N/A')}",
+        f"  World Size (Processes): {training_info.get('world_size', 'N/A')}",
+        "",
+        "DATASET INFORMATION:",
+        f"  Dataset Size: {training_info.get('dataset_size', 'N/A')} samples",
+        "",
+        "OPTIMIZATION:",
+        f"  Optimizer: {training_info.get('optimizer_type', 'N/A')}",
+        f"  Scheduler: {training_info.get('scheduler_type', 'N/A')}",
+        f"  Seed: {training_info.get('seed', 'N/A')}",
+        "",
+        "=" * 60
+    ]
+    
+    # Save to text file
+    summary_path = os.path.join(log_dir, "training_config_summary.txt")
+    with open(summary_path, 'w') as f:
+        f.write('\n'.join(summary_lines))
+    
+    if logger:
+        logger.info(f"Training configuration summary saved to: {summary_path}")
+    
+    return summary_path
+
+
+def save_environment_info(args, log_dir: str, logger=None):
+    """
+    Save command line arguments and environment information for reproducibility.
+    
+    Args:
+        args: Command line arguments from argparse
+        log_dir (str): Log directory path
+        logger: Logger instance for info messages
+        
+    Returns:
+        str: Path to the saved environment info file
+    """
+    import json
+    import datetime
+    import sys
+    import platform
+    
+    # Collect environment information
+    env_info = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "command_line_args": vars(args),
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "executable": sys.executable,
+        "environment_variables": {
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", ""),
+            "CUDA_DEVICE_ORDER": os.environ.get("CUDA_DEVICE_ORDER", ""),
+        }
+    }
+    
+    # Save to JSON file
+    env_path = os.path.join(log_dir, "environment_info.json")
+    with open(env_path, 'w') as f:
+        json.dump(env_info, f, indent=2)
+    
+    if logger:
+        logger.info(f"Environment information saved to: {env_path}")
+    
+    return env_path
+
+
+def save_all_training_info(config: dict, training_info: dict, args, log_dir: str, logger=None):
+    """
+    Save all training-related information in an organized manner.
+    
+    This function saves:
+    1. Complete training configuration (JSON)
+    2. Human-readable training summary (TXT)
+    3. Environment information (JSON)
+    
+    Args:
+        config (dict): Original configuration dictionary
+        training_info (dict): Computed training information
+        args: Command line arguments
+        log_dir (str): Log directory path
+        logger: Logger instance for info messages
+        
+    Returns:
+        dict: Dictionary containing paths to all saved files
+    """
+    saved_files = {}
+    
+    # Save complete training configuration
+    saved_files['config'] = save_training_config(config, training_info, log_dir, logger)
+    
+    # Save human-readable summary
+    saved_files['summary'] = save_training_config_summary(training_info, log_dir, logger)
+    
+    # Save environment information
+    saved_files['environment'] = save_environment_info(args, log_dir, logger)
+    
+    if logger:
+        logger.info("=" * 50)
+        logger.info("ALL TRAINING INFORMATION SAVED")
+        logger.info("=" * 50)
+        logger.info(f"Configuration: {saved_files['config']}")
+        logger.info(f"Summary: {saved_files['summary']}")
+        logger.info(f"Environment: {saved_files['environment']}")
+        logger.info("=" * 50)
+    
+    return saved_files
+
+
+def get_resume_checkpoint_path(resume_path: str, resume_from_best: bool = False) -> str:
+    """
+    Get the appropriate checkpoint path for resuming training.
+    
+    Args:
+        resume_path (str): Base path to the log directory or specific checkpoint
+        resume_from_best (bool): Whether to resume from best model instead of last model
+        
+    Returns:
+        str: Path to the checkpoint file
+    """
+    if os.path.isfile(resume_path):
+        # Direct path to checkpoint file
+        return resume_path
+    
+    # Assume it's a log directory path
+    if resume_from_best:
+        checkpoint_path = os.path.join(resume_path, "checkpoints", "best_model.pth")
+    else:
+        checkpoint_path = os.path.join(resume_path, "checkpoints", "last_model.pth")
+    
+    return checkpoint_path
 

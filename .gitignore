@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 *pycache*
 *.png
+logs/
+plots/
