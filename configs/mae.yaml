@@ -31,19 +31,22 @@ model:
 training:
   seed: 0
   imgaug: default
-  train_batch_size: 128    # per GPU
+  train_batch_size: 256    # per GPU
   val_batch_size: 1024
   test_batch_size: 128
   num_epochs: 800
-  num_workers: 8  # Number of CPU workers for the DataLoader
+  num_workers: 16  # Number of CPU workers for the DataLoader
   num_gpus: 1
   num_nodes: 1
   # frequency to log training metrics
   log_every_n_steps: 10
+  log_every_n_epochs: 20
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
   resume: null
   resume_from_best: false
+
+  expected_batch_size: 1024 # if null, use the default value from the optimizer
 
 # optimizer configuration
 optimizer:

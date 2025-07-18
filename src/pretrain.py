@@ -47,13 +47,14 @@ def main():
     )
     config['model']['model_params']['num_views'] = len(dataset.available_views)
     config['data']['avail_views'] = dataset.available_views
-    train_batch_size = config.get('training', {}).get('train_batch_size')
+    train_batch_size = config['training']['train_batch_size']
+    
     # dataloader
     dataloader = DataLoader(
         dataset, 
         batch_size=train_batch_size, 
         shuffle=True, 
-        num_workers=16, 
+        num_workers=config['training']['num_workers'], 
         pin_memory=True,
         drop_last=True,
     )
@@ -65,9 +66,16 @@ def main():
     # get world size
     world_size = accelerator.num_processes
     global_batch_size = train_batch_size * world_size
-    lr = lr * global_batch_size / 256 # scale lr by global batch size
     weight_decay = config['optimizer']['wd']
-    total_steps = epochs * len(dataloader) // world_size
+    
+    log_every_n_epochs = config['training']['log_every_n_epochs'] # log every n epochs
+    expected_batch_size = config['training']['expected_batch_size']
+    if expected_batch_size is not None:
+        accumulate_grad_batches = max(1, expected_batch_size // global_batch_size)
+    else:
+        accumulate_grad_batches = max(1, config['optimizer']['accumulate_grad_batches'])
+    total_steps = epochs * len(dataloader) // world_size // accumulate_grad_batches
+    lr = lr * global_batch_size / 256 * accumulate_grad_batches # scale lr by global batch size
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     # scheduler
@@ -112,6 +120,8 @@ def main():
         "global_batch_size": global_batch_size,
         "local_batch_size": train_batch_size,
         "world_size": world_size,
+        "accumulate_grad_batches": accumulate_grad_batches,
+        "effective_batch_size": global_batch_size * accumulate_grad_batches,
         "dataset_size": len(dataset),
         "steps_per_epoch": len(dataloader),
         "available_views": dataset.available_views,
@@ -136,6 +146,8 @@ def main():
     logger.info(f"Total steps: {total_steps}")
     logger.info(f"Learning rate: {lr:.2e}")
     logger.info(f"Global batch size: {global_batch_size} (local: {train_batch_size} × {world_size} processes)")
+    logger.info(f"Gradient accumulation steps: {accumulate_grad_batches}")
+    logger.info(f"Effective batch size: {global_batch_size * accumulate_grad_batches}")
     logger.info(f"Dataset size: {len(dataset)} samples")
     logger.info(f"Steps per epoch: {len(dataloader)}")
     logger.info(f"Available views: {dataset.available_views}")
@@ -146,49 +158,57 @@ def main():
         model.train()
         running_loss = 0.
         pbar = tqdm(dataloader, desc=f'Epoch {epoch+1}')
-        for batch in pbar:
-            optimizer.zero_grad()
+        for batch_idx, batch in enumerate(pbar):
+            # Forward pass
             results_dict = model(batch)
             loss = results_dict['loss']
             running_loss += loss.item()
+            
+            # Scale loss for gradient accumulation
+            loss = loss / accumulate_grad_batches
             loss.backward()
-            optimizer.step()
-            scheduler.step()
+            
+            # Update weights every accumulate_grad_batches steps
+            if (batch_idx + 1) % accumulate_grad_batches == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+                scheduler.step()
             
             # Update progress bar with current loss
-            pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+            pbar.set_postfix({'loss': f'{loss.item() * accumulate_grad_batches:.4f}'})
         
         avg_loss = running_loss/len(dataloader)
-        print(f'Epoch {epoch+1} loss: {avg_loss}')
+        logger.info(f'Epoch {epoch+1} loss: {avg_loss}')
         
-        # Save best model
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            best_epoch = epoch + 1
+        if epoch % log_every_n_epochs == 0 or epoch == epochs - 1 or epoch == 0:
+            # save best model
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                best_epoch = epoch + 1
+                if accelerator.is_main_process:
+                    best_model_path = os.path.join(log_dir, "checkpoints", "best_model.pth")
+                    accelerator.save_state(best_model_path)
+                    logger.info(f"Best model saved at epoch {epoch+1} with loss: {best_loss:.4f}")
+            
+            # Save last model
             if accelerator.is_main_process:
-                best_model_path = os.path.join(log_dir, "checkpoints", "best_model.pth")
-                accelerator.save_state(best_model_path)
-                logger.info(f"Best model saved at epoch {epoch+1} with loss: {best_loss:.4f}")
-        
-        # Save last model
-        if accelerator.is_main_process:
-            last_model_path = os.path.join(log_dir, "checkpoints", "last_model.pth")
-            accelerator.save_state(last_model_path)
-            
-            # Save training state
-            training_state = {
-                'epoch': epoch + 1,
-                'best_loss': best_loss,
-                'best_epoch': best_epoch,
-                'global_step': (epoch + 1) * len(dataloader)
-            }
-            training_state_path = os.path.join(log_dir, "checkpoints", "training_state.json")
-            with open(training_state_path, 'w') as f:
-                json.dump(training_state, f, indent=2)
-            
-            # Save plots
-            plot_path = os.path.join(log_dir, "plots", f'epoch_{epoch+1}_step_{pbar.n}.png')
-            plot_example_images(batch, results_dict, recon_num=8, save_path=plot_path)
+                last_model_path = os.path.join(log_dir, "checkpoints", "last_model.pth")
+                accelerator.save_state(last_model_path)
+                
+                # Save training state
+                training_state = {
+                    'epoch': epoch + 1,
+                    'best_loss': best_loss,
+                    'best_epoch': best_epoch,
+                    'global_step': (epoch + 1) * len(dataloader)
+                }
+                training_state_path = os.path.join(log_dir, "checkpoints", "training_state.json")
+                with open(training_state_path, 'w') as f:
+                    json.dump(training_state, f, indent=2)
+                
+                # Save plots
+                plot_path = os.path.join(log_dir, "plots", f'epoch_{epoch+1}_step_{pbar.n}.png')
+                plot_example_images(batch, results_dict, recon_num=8, save_path=plot_path)
     
     # Final summary
     if accelerator.is_main_process:
