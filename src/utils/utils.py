@@ -63,6 +63,11 @@ def get_args():
     parser.add_argument('--config', type=str, default='configs/mae.yaml', help='config file (yaml)')
     parser.add_argument('--resume', type=str, default=None, help='path to checkpoint to resume from')
     parser.add_argument('--resume_from_best', action='store_true', help='resume from best model instead of last model')
+    parser.add_argument('--litpose_config', type=str, default='configs/litpose/config_mirror-mouse-separate.yaml', help='config file (yaml)')
+    parser.add_argument('--litpose_frame', type=int, default=100, help='num of litpose frames to train on')
+    parser.add_argument('--mode', type=str, default='ft', help='mode to train on')
+    parser.add_argument('--model', type=str, default='mae', help='model to train on')
+    parser.add_argument('--epochs', type=int, default=300, help='number of epochs to train for')
     return parser.parse_args()
 
 def set_seed(seed):

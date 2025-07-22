@@ -9,3 +9,5 @@ __pycache__/
 *.png
 logs/
 plots/
+outputs/
+ds-*.yaml

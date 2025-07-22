@@ -1,8 +1,8 @@
 #!/bin/bash
 
 memory=64g
-num_nodes=2
-constraint="a100|h100|rtx8000"
+num_nodes=4
+constraint="h100"
 multi_node_args="
 --cpus-per-task=16
 --gres=gpu:1
