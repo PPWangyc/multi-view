@@ -12,6 +12,8 @@
 #SBATCH --constraint=a100|h100|rtx8000
 #SBATCH --export=ALL
 
+config_file=$1
+
 . ~/.bashrc
 
 cd ../..
@@ -27,7 +29,7 @@ echo "Accelerate command is: $accelerate_cmd"
 
 # Script arguments
 script_args="
-    --config configs/mae.yaml
+    --config configs/${config_file}.yaml
 "
 $accelerate_cmd $script_path $script_args
 cd scripts/greene

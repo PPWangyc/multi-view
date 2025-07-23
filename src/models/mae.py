@@ -18,6 +18,7 @@ class VisionTransformer(torch.nn.Module):
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> Dict[str, torch.Tensor]:
+        x = x['image']
         results_dict = self.vit_mae(pixel_values=x, return_recon=True)
         return results_dict
 

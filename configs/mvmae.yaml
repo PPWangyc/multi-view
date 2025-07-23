@@ -1,6 +1,6 @@
 # model configuration
 model:
-  name: mae
+  name: mvmae
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
@@ -61,5 +61,5 @@ optimizer:
 
 # data configuration
 data:
-  name: base
+  name: mv
   data_dir: data/ssl/mirror-mouse-separate

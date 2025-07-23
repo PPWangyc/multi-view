@@ -4,6 +4,8 @@ memory=64g
 constraint_a100_h100="a100|h100"
 constraint_rtx8000="rtx8000"
 
+config_file=$1
+
 # Function to submit job for specific GPU type
 submit_job() {
     local gpu_type=$1
@@ -23,7 +25,7 @@ submit_job() {
     
     script_path=pretrain.sh
     
-    sbatch $multi_node_args $script_path
+    sbatch $multi_node_args $script_path $config_file
 }
 
 # Submit job for A100/H100 (4 nodes)

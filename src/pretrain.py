@@ -4,6 +4,7 @@ from utils.utils import (
     set_seed,
     get_args,
     NAME_MODEL,
+    NAME_DATASET,
     plot_example_images,
     create_log_dir,
     load_checkpoint_for_resume,
@@ -28,7 +29,7 @@ def main():
     config = load_config(args.config)
 
     # Create log directory
-    experiment_name = config.get('experiment_name', 'mae_pretrain')
+    experiment_name = config['model']['name']+'_pretrain'
     log_dir = create_log_dir(experiment_name)
     logger.info(f"Log directory created: {log_dir}")
 
@@ -41,12 +42,13 @@ def main():
         pipe_params = expand_imgaug_str_to_dict(pipe_params)
     imgaug_pipeline_ = imgaug_pipeline(pipe_params)
     # dataset
-    dataset = MVDataset(
-        data_dir=config.get('data', {}).get('data_dir'),
+    dataset = NAME_DATASET[config['data']['name']](
+        data_dir=config['data']['data_dir'],
         imgaug_pipeline=None,
     )
-    config['model']['model_params']['num_views'] = len(dataset.available_views)
-    config['data']['avail_views'] = dataset.available_views
+    if config['data']['name'] == 'mv':
+        config['model']['model_params']['num_views'] = len(dataset.available_views)
+        config['data']['avail_views'] = dataset.available_views
     train_batch_size = config['training']['train_batch_size']
     
     # dataloader
@@ -124,8 +126,8 @@ def main():
         "effective_batch_size": global_batch_size * accumulate_grad_batches,
         "dataset_size": len(dataset),
         "steps_per_epoch": len(dataloader),
-        "available_views": dataset.available_views,
-        "num_views": len(dataset.available_views),
+        "available_views": dataset.available_views if config['data']['name'] == 'mv' else None,
+        "num_views": len(dataset.available_views) if config['data']['name'] == 'mv' else None,
         "weight_decay": weight_decay,
         "warmup_percentage": config['optimizer']['warmup_pct'],
         "scheduler_type": "OneCycleLR",
@@ -150,7 +152,7 @@ def main():
     logger.info(f"Effective batch size: {global_batch_size * accumulate_grad_batches}")
     logger.info(f"Dataset size: {len(dataset)} samples")
     logger.info(f"Steps per epoch: {len(dataloader)}")
-    logger.info(f"Available views: {dataset.available_views}")
+    logger.info(f"Available views: {dataset.available_views if config['data']['name'] == 'mv' else None}")
     logger.info(f"Model: {config['model']['name']}")
     logger.info("=" * 50)
     # train

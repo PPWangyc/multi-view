@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import matplotlib.pyplot as plt
 from models.mae import VisionTransformer, MVVisionTransformer
+from data.datasets import MVDataset, BaseDataset
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225] 
@@ -15,6 +16,10 @@ NAME_MODEL = {
     'mae': VisionTransformer,
     'mvmae': MVVisionTransformer,
     'ijepa': 'facebook/vit-mae-base',
+}
+NAME_DATASET = {
+    'mv': MVDataset,
+    'base': BaseDataset,
 }
 
 def denormalize_image(image):
@@ -220,11 +225,18 @@ def plot_example_images(batch, results_dict, recon_num=8, save_path=None):
         save_path (str, optional): Path to save the plot (if None, displays the plot)
     """
     # Extract images and views
-    input_images = batch['input_image'][:recon_num]
-    output_images = batch['output_image'][:recon_num]
+    if 'input_image' in batch:
+        input_images = batch['input_image'][:recon_num]
+        output_images = batch['output_image'][:recon_num]
+        input_views = batch['input_view'][:recon_num]
+        output_views = batch['output_view'][:recon_num]
+    else:
+        input_images = batch['image'][:recon_num]
+        output_images = batch['image'][:recon_num]
+        input_views = [''] * recon_num
+        output_views = [''] * recon_num
     recon_images = results_dict['reconstructions'][:recon_num]
-    input_views = batch['input_view'][:recon_num]
-    output_views = batch['output_view'][:recon_num]
+    
     
     # Convert tensors to numpy arrays and move to CPU if needed
     if torch.is_tensor(input_images):
