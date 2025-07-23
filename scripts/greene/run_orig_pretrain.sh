@@ -13,7 +13,7 @@ multi_node_args="
 --time=48:00:00
 --output=pretrain.%j.out
 "
-
+config_file=$1
 script_path=pretrain.sh
 
-sbatch $multi_node_args $script_path
+sbatch $multi_node_args $script_path $config_file
