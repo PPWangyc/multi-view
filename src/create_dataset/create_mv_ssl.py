@@ -49,7 +49,7 @@ def main():
         raise ValueError(f'Dataset {dataset} not supported')
     total_frames = 0
     print(f"Extracting frames from {len(anchor_video_paths)} videos from {anchor_view} view in {dataset} dataset")
-    for video_path in anchor_video_paths[:1]:
+    for video_path in anchor_video_paths:
         all_view_video_paths = get_all_views_for_anchor(video_path, video_dict)
         try:
             anchor_idxs = select_frame_idxs_kmeans(
