@@ -138,7 +138,6 @@ def main():
         "optimizer_type": "AdamW",
         "model_name": config['model']['name'],
         "seed": args.seed,
-        "experiment_name": experiment_name
     }
     
     # Save all training information to log directory
