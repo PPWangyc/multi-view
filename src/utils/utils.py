@@ -22,6 +22,12 @@ NAME_DATASET = {
     'base': BaseDataset,
 }
 
+def get_experiment_name(config):
+    model_name = config['model']['name']
+    type_name = config['data']['name']
+    dataset_name = config['data']['data_dir'].split('/')[-1]
+    return f'{model_name}_{type_name}_{dataset_name}_pretrain'
+
 def denormalize_image(image):
     """
     Denormalize image from ImageNet normalization back to [0, 1] range.

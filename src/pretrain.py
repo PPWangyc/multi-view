@@ -10,6 +10,7 @@ from utils.utils import (
     load_checkpoint_for_resume,
     get_resume_checkpoint_path,
     save_all_training_info,
+    get_experiment_name,
 )
 from data.datasets import MVDataset
 from utils.log_utils import get_logger
@@ -33,7 +34,7 @@ def main():
 
     # Create log directory
     if accelerator.is_main_process:
-        experiment_name = config['model']['name']+'_pretrain'
+        experiment_name = get_experiment_name(config)
         log_dir = create_log_dir(experiment_name)
         logger.info(f"Log directory created: {log_dir}")    
 
@@ -47,9 +48,10 @@ def main():
         data_dir=config['data']['data_dir'],
         imgaug_pipeline=None,
     )
-    if config['data']['name'] == 'mv':
-        config['model']['model_params']['num_views'] = len(dataset.available_views)
-        config['data']['avail_views'] = dataset.available_views
+    # number of views
+    num_views = len(dataset.available_views) if config['data']['name'] == 'mv' else 1
+    config['model']['model_params']['num_views'] = num_views if config['data']['name'] == 'mv' else None
+    config['data']['avail_views'] = dataset.available_views if config['data']['name'] == 'mv' else None
     train_batch_size = config['training']['train_batch_size']
     
     # dataloader
@@ -64,14 +66,14 @@ def main():
     # model
     model = NAME_MODEL[config['model']['name']](config)
     # optimizer
-    epochs = config.get('training').get('num_epochs')
+    epochs = config.get('training').get('num_epochs') * num_views
     lr = config['optimizer']['lr']
     # get world size
     world_size = accelerator.num_processes
     global_batch_size = train_batch_size * world_size
     weight_decay = config['optimizer']['wd']
     
-    log_every_n_epochs = config['training']['log_every_n_epochs'] # log every n epochs
+    log_every_n_epochs = config['training']['log_every_n_epochs'] * num_views # log every n epochs
     expected_batch_size = config['training']['expected_batch_size']
     if expected_batch_size is not None:
         accumulate_grad_batches = max(1, expected_batch_size // global_batch_size)
@@ -119,6 +121,7 @@ def main():
     training_info = {
         "epochs": epochs,
         "total_steps": total_steps,
+        "log_every_n_epochs": log_every_n_epochs,
         "learning_rate": lr,
         "global_batch_size": global_batch_size,
         "local_batch_size": train_batch_size,
@@ -153,8 +156,9 @@ def main():
     logger.info(f"Effective batch size: {global_batch_size * accumulate_grad_batches}")
     logger.info(f"Dataset size: {len(dataset)} samples")
     logger.info(f"Steps per epoch: {len(dataloader)}")
-    logger.info(f"Available views: {dataset.available_views if config['data']['name'] == 'mv' else None}")
+    logger.info(f"Available views: {num_views}")
     logger.info(f"Model: {config['model']['name']}")
+    logger.info(f"Log every n epochs: {log_every_n_epochs}")
     logger.info("=" * 50)
     # train
     for epoch in range(start_epoch, epochs):
