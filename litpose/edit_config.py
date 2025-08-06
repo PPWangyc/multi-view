@@ -35,7 +35,7 @@ def main(args):
         file_name
     )
     base_dir = os.getcwd()
-    if model == 'vitb-mv':
+    if model in ['vitb-mv', 'vitb-sv']:
         model_path = os.path.join(base_dir, f"logs/ds-{dataset_name}_model-{model}/model.safetensors")
         model = 'vitb_imagenet'
         # set the pretrain model path

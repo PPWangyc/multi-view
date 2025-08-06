@@ -10,7 +10,8 @@ from utils.utils import (
     get_anchor_view_paths,
     get_all_views_for_anchor,
     get_video_id_from_path,
-    set_seed
+    set_seed,
+    get_video_frame_num
 )
 from pathlib import Path
 import numpy as np
@@ -30,7 +31,6 @@ def main():
     # Get available views from the first video entry
     first_video_views = next(iter(video_dict.values()))
     avail_views = list(first_video_views.keys())
-    print(f"Available views: {avail_views}")
     if dataset == 'mirror-mouse-separate':
         # 17 videos, 2 views per video
         # 2 * 17 * 3000 = 102000 frames
@@ -38,17 +38,32 @@ def main():
         anchor_view = 'top'
         # get video paths only for anchor view
         anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
+    elif dataset == 'fly-anipose':
+        # 16 videos, 6 views per video
+        # 6 * 16 * 1000 = 96000 frames
+        frames_per_video = 1000
+        anchor_view = 'A'
+        # get video paths only for anchor view
+        anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
     else:
         raise ValueError(f'Dataset {dataset} not supported')
-
+    total_frames = 0
     print(f"Extracting frames from {len(anchor_video_paths)} videos from {anchor_view} view in {dataset} dataset")
-    for video_path in anchor_video_paths:
+    for video_path in anchor_video_paths[:1]:
         all_view_video_paths = get_all_views_for_anchor(video_path, video_dict)
-        anchor_idxs = select_frame_idxs_kmeans(
-            video_file=video_path,
-            resize_dims=32,
-            n_frames_to_select=frames_per_video,
-        )
+        try:
+            anchor_idxs = select_frame_idxs_kmeans(
+                video_file=video_path,
+                resize_dims=32,
+                    n_frames_to_select=frames_per_video,
+                )
+        except Exception as e:
+            if 'valid video segment too short' in str(e):
+                anchor_idxs = np.arange(get_video_frame_num(video_path))
+                print(f'warning: {video_path} is too short, use all {len(anchor_idxs)} frames')
+            else:
+                raise e
+            
         video_id = get_video_id_from_path(video_path)
         # sort anchor_idxs
         anchor_idxs = np.sort(anchor_idxs)
@@ -59,7 +74,6 @@ def main():
         for view, view_video_path in all_view_video_paths.items():
             output_view_dir = Path(output_dir) / video_id / view
             output_view_dir = output_view_dir.resolve()
-            print(f"Exporting frames for {view} view to {output_view_dir}")
             # export frames
             export_frames(
                 video_file=view_video_path,
@@ -70,7 +84,7 @@ def main():
         # save a csv file with the frames_to_label
         csv_path = Path(output_dir) / video_id / "selected_frames.csv"
         np.savetxt(csv_path, frames_to_label, delimiter=",", fmt="%s")
-        
+        total_frames += len(anchor_idxs)
     video_ids = list(video_dict.keys())
     # save information about available views and anchor view into output_dir
     # add timestamp to the info.json file
@@ -91,7 +105,8 @@ def main():
         "extension": extension,
         "timestamp": timestamp,
         "author": args.author,
-        "seed": args.seed
+        "seed": args.seed,
+        "total_ssl_frames": total_frames * len(avail_views)
     }
     
     # Save as JSON file

@@ -28,13 +28,14 @@ def main():
     set_seed(args.seed)
     config = load_config(args.config)
 
-    # Create log directory
-    experiment_name = config['model']['name']+'_pretrain'
-    log_dir = create_log_dir(experiment_name)
-    logger.info(f"Log directory created: {log_dir}")
-
     # accelerate
     accelerator = Accelerator()
+
+    # Create log directory
+    if accelerator.is_main_process:
+        experiment_name = config['model']['name']+'_pretrain'
+        log_dir = create_log_dir(experiment_name)
+        logger.info(f"Log directory created: {log_dir}")    
 
     # imgaug transform
     pipe_params = config.get('training', {}).get('imgaug', 'none')
@@ -138,7 +139,7 @@ def main():
     }
     
     # Save all training information to log directory
-    save_all_training_info(config, training_info, args, log_dir, logger)
+    save_all_training_info(config, training_info, args, log_dir, logger) if accelerator.is_main_process else None
     
     # Log training configuration
     logger.info("=" * 50)

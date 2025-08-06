@@ -111,10 +111,15 @@ def get_video_paths_by_id(directory_path):
     
     for mp4_file in mp4_files:
         filename = mp4_file.name
-        
-        # Extract video ID and view from filename
-        # Pattern: video_id_view.mp4 (e.g., 180605_000_bot.mp4)
-        match = re.match(r'^(.+)_([^_]+)\.mp4$', filename)
+        if 'Cam-' in filename:
+            # Pattern: video_id_Cam-view_*.mp4 (e.g., 05272019_fly1_0_R1C24_Cam-A_rot-ccw-0.06_sec.mp4)
+            # fly-pose dataset
+            match = re.match(r'^(.+)_Cam-([^_]+)_.*\.mp4$', filename)
+        else:
+            # Extract video ID and view from filename
+            # mirror-mouse-separate dataset
+            # Pattern: video_id_view.mp4 (e.g., 180605_000_bot.mp4)
+            match = re.match(r'^(.+)_([^_]+)\.mp4$', filename)
         
         if match:
             video_id = match.group(1)  # e.g., "180605_000"
@@ -171,9 +176,12 @@ def get_all_views_for_anchor(anchor_path, video_dict):
         all_views = get_all_views_for_anchor(anchor_path, video_dict)
         # Returns: {'bot': path1, 'top': path2}
     """
-    # Extract video ID from anchor path
-    anchor_filename = anchor_path.name
-    match = re.match(r'^(.+)_([^_]+)\.mp4$', anchor_filename)
+    if 'Cam-' in anchor_path.name:
+        # fly-pose dataset
+        match = re.match(r'^(.+)_Cam-([^_]+)_.*\.mp4$', anchor_path.name)
+    else:
+        # mirror-mouse-separate dataset
+        match = re.match(r'^(.+)_([^_]+)\.mp4$', anchor_path.name)
     
     if not match:
         raise ValueError(f"Anchor path {anchor_path} does not match expected format")
@@ -569,3 +577,10 @@ def get_resume_checkpoint_path(resume_path: str, resume_from_best: bool = False)
     
     return checkpoint_path
 
+def get_video_frame_num(video_path):
+    """
+    Get the number of frames in a video file.
+    """
+    import cv2
+    cap = cv2.VideoCapture(video_path)
+    return int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
