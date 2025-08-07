@@ -16,12 +16,11 @@
 cd ../..
 conda activate mv
 
+dataset=$1 # fly-anipose, mirror-mouse-separate
+model=$2 # resnet50_animal_ap10k, vitb_imagenet, vitb-mv, vitb-sv
+train_frame=$3 # 100, 1000
+seed=$4 # 0, 1, 2
 
-model=$1
-train_frame=$2
-seed=$3
-
-dataset=mirror-mouse-separate
 epochs=300
 mode=ft
 script_args="

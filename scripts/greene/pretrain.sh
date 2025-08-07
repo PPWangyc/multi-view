@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --account=pr_136_tandon_advanced
-#SBATCH --job-name="train_encoding"
-#SBATCH --output="train_encoding.%j.out"
+#SBATCH --job-name="pretrain"
+#SBATCH --output="pretrain.%j.out"
 #SBATCH -N 4
 #SBATCH -c 16
 #SBATCH --ntasks-per-node=1
