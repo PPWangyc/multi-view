@@ -21,6 +21,7 @@ from tqdm import tqdm
 from accelerate import Accelerator
 import os
 import json
+import wandb
 
 logger = get_logger()
 
@@ -37,6 +38,22 @@ def main():
         experiment_name = get_experiment_name(config)
         log_dir = create_log_dir(experiment_name)
         logger.info(f"Log directory created: {log_dir}")    
+
+    # Initialize wandb
+    use_wandb = config['training']['use_wandb']
+    if accelerator.is_main_process:
+        try:
+            wandb.init(
+                project="multi-view-pretrain",
+                name=experiment_name,
+                config=config,
+                dir=log_dir
+            )
+            use_wandb = True
+            logger.info(f"Wandb initialized for experiment: {experiment_name}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb logging.")
+            use_wandb = False
 
     # imgaug transform
     pipe_params = config.get('training', {}).get('imgaug', 'none')
@@ -140,6 +157,11 @@ def main():
         "seed": args.seed,
     }
     
+    # Log training configuration to wandb
+    if accelerator.is_main_process and use_wandb:
+        wandb.config.update(training_info)
+        logger.info("Training configuration logged to wandb")
+    
     # Save all training information to log directory
     save_all_training_info(config, training_info, args, log_dir, logger) if accelerator.is_main_process else None
     
@@ -186,6 +208,21 @@ def main():
         avg_loss = running_loss/len(dataloader)
         logger.info(f'Epoch {epoch+1} loss: {avg_loss}')
         
+        # Log training progress to wandb
+        if accelerator.is_main_process and use_wandb:
+            log_dict = {
+                "epoch": epoch + 1,
+                "train_loss": avg_loss,
+                "learning_rate": scheduler.get_last_lr()[0] if scheduler.get_last_lr() else lr
+            }
+            
+            # Log best loss if it's a new best
+            if avg_loss < best_loss:
+                log_dict["best_loss"] = avg_loss
+                log_dict["best_epoch"] = epoch + 1
+            
+            wandb.log(log_dict)
+        
         if epoch % log_every_n_epochs == 0 or epoch == epochs - 1 or epoch == 0:
             # save best model
             if avg_loss < best_loss:
@@ -220,6 +257,17 @@ def main():
     if accelerator.is_main_process:
         logger.info(f"Training completed. Best model saved at epoch {best_epoch} with loss: {best_loss:.4f}")
         logger.info(f"All checkpoints and plots saved in: {log_dir}")
+        
+        # Finish wandb run
+        if use_wandb:
+            # Log final summary
+            wandb.log({
+                "final_best_loss": best_loss,
+                "final_best_epoch": best_epoch,
+                "total_epochs": epochs
+            })
+            wandb.finish()
+            logger.info("Wandb run finished")
 
 if __name__ == '__main__':
     main()

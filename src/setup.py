@@ -10,6 +10,7 @@ setup(
         'numpy',
         'tqdm',
         'timm',
-        'beast'
+        'beast-backbones',
+        'wandb'
     ],
 )
