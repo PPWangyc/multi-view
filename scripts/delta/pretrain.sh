@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --account=pr_136_tandon_advanced
+#SBATCH --account=beez-delta-gpu
+#SBATCH --partition=gpuA40x4,gpuA100x4,gpuA40x4-preempt,gpuA100x4-preempt
 #SBATCH --job-name="pretrain"
 #SBATCH --output="pretrain.%j.out"
-#SBATCH -N 4
-#SBATCH -c 16
-#SBATCH --ntasks-per-node=1
-#SBATCH --mem=64g
-#SBATCH --gres=gpu:1
-#SBATCH -t 48:00:00
-#SBATCH --constraint=h100|a100
+#SBATCH --nodes=4
+#SBATCH --ntasks=4
+#SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64g   
+#SBATCH -t 2-00
 #SBATCH --export=ALL
 
 config_file=$1
@@ -33,7 +33,7 @@ script_args="
     --config configs/pretrain/${config_file}.yaml
 "
 $accelerate_cmd $script_path $script_args
-cd scripts/greene
+cd scripts/delta
 conda activate mv
 
 end_time=$(date +%s)

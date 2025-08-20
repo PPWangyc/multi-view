@@ -9,7 +9,6 @@ setup(
         'torch',
         'numpy',
         'tqdm',
-        'timm',
         'beast-backbones',
         'wandb'
     ],

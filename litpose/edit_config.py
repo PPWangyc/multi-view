@@ -14,6 +14,7 @@ def main(args):
     epochs = args.epochs
     mode= args.mode
     seed = args.seed
+    data_dir = args.data_dir
     if 'vit' in model:
         # double the epochs for vit models
         # epochs = epochs * 2
@@ -41,6 +42,10 @@ def main(args):
         # set the pretrain model path
         litpose_config['model']['backbone_checkpoint'] = model_path
     # edit config
+    # change data dir
+    litpose_config['data']['data_dir'] = data_dir
+    litpose_config['data']['video_dir'] = os.path.join(data_dir, 'videos')
+    litpose_config['data']['camera_params_file'] = os.path.join(data_dir, 'calibrations.csv')
     # change seed
     litpose_config['training']['rng_seed_data_pt'] = seed
     litpose_config['training']['rng_seed_model_pt'] = seed

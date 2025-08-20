@@ -91,6 +91,7 @@ def main():
     weight_decay = config['optimizer']['wd']
     
     log_every_n_epochs = config['training']['log_every_n_epochs'] * num_views # log every n epochs
+    save_every_n_epochs = config['training']['save_every_n_epochs'] * num_views # save every n epochs
     expected_batch_size = config['training']['expected_batch_size']
     if expected_batch_size is not None:
         accumulate_grad_batches = max(1, expected_batch_size // global_batch_size)
@@ -139,6 +140,7 @@ def main():
         "epochs": epochs,
         "total_steps": total_steps,
         "log_every_n_epochs": log_every_n_epochs,
+        "save_every_n_epochs": save_every_n_epochs,
         "learning_rate": lr,
         "global_batch_size": global_batch_size,
         "local_batch_size": train_batch_size,
@@ -180,6 +182,7 @@ def main():
     logger.info(f"Available views: {num_views}")
     logger.info(f"Model: {config['model']['name']}")
     logger.info(f"Log every n epochs: {log_every_n_epochs}")
+    logger.info(f"Save every n epochs: {save_every_n_epochs}")
     logger.info("=" * 50)
     # train
     for epoch in range(start_epoch, epochs):
@@ -252,7 +255,12 @@ def main():
                 # Save plots
                 plot_path = os.path.join(log_dir, "plots", f'epoch_{epoch+1}_step_{pbar.n}.png')
                 plot_example_images(batch, results_dict, recon_num=8, save_path=plot_path)
-    
+            # save model every n epochs
+            if epoch % save_every_n_epochs == 0:
+                if accelerator.is_main_process:
+                    model_path = os.path.join(log_dir, "checkpoints", f'epoch_{epoch+1}_model.pth')
+                    accelerator.save_state(model_path)
+                    logger.info(f"Model saved at epoch {epoch+1}")
     # Final summary
     if accelerator.is_main_process:
         logger.info(f"Training completed. Best model saved at epoch {best_epoch} with loss: {best_loss:.4f}")

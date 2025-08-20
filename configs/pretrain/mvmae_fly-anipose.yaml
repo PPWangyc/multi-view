@@ -41,8 +41,11 @@ training:
   # frequency to log training metrics
   log_every_n_steps: 10
   log_every_n_epochs: 20
+  # frequency to save model
+  save_every_n_epochs: 100
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
+  # resume: logs/2025_08_06_22_07_14_mvmae_mv_fly-anipose_pretrain
   resume: null
   resume_from_best: false
 
