@@ -112,7 +112,6 @@ def get_video_paths_by_id(directory_path):
     """
     video_paths = {}
     directory = Path(directory_path)
-    
     # Find all MP4 files in the directory
     mp4_files = list(directory.glob('*.mp4'))
     
@@ -122,6 +121,10 @@ def get_video_paths_by_id(directory_path):
             # Pattern: video_id_Cam-view_*.mp4 (e.g., 05272019_fly1_0_R1C24_Cam-A_rot-ccw-0.06_sec.mp4)
             # fly-pose dataset
             match = re.match(r'^(.+)_Cam-([^_]+)_.*\.mp4$', filename)
+        elif 'iblrig' in filename:
+            # Pattern: *_view.downsampled.*.video_id.mp4
+            # iblri dataset
+            match = re.match(r'^(.+)_([^_]+)\.downsampled.*\.([^.]+)\.mp4$', filename)
         else:
             # Extract video ID and view from filename
             # mirror-mouse-separate dataset
@@ -129,9 +132,14 @@ def get_video_paths_by_id(directory_path):
             match = re.match(r'^(.+)_([^_]+)\.mp4$', filename)
         
         if match:
-            video_id = match.group(1)  # e.g., "180605_000"
-            view = match.group(2)      # e.g., "bot"
-            
+            if 'iblrig' in filename:
+                # For iblrig pattern: group(1) = prefix, group(2) = view, group(3) = video_id
+                video_id = match.group(3)  # e.g., "video_id"
+                view = match.group(2)      # e.g., "view"
+            else:
+                # For other patterns: group(1) = video_id, group(2) = view
+                video_id = match.group(1)  # e.g., "180605_000"
+                view = match.group(2)      # e.g., "bot"
             if video_id not in video_paths:
                 video_paths[video_id] = {}
             
@@ -186,14 +194,19 @@ def get_all_views_for_anchor(anchor_path, video_dict):
     if 'Cam-' in anchor_path.name:
         # fly-pose dataset
         match = re.match(r'^(.+)_Cam-([^_]+)_.*\.mp4$', anchor_path.name)
+    elif 'iblrig' in anchor_path.name:
+        # iblrig dataset
+        match = re.match(r'^(.+)_([^_]+)\.downsampled.*\.([^.]+)\.mp4$', anchor_path.name)
     else:
         # mirror-mouse-separate dataset
         match = re.match(r'^(.+)_([^_]+)\.mp4$', anchor_path.name)
     
     if not match:
         raise ValueError(f"Anchor path {anchor_path} does not match expected format")
-    
-    video_id = match.group(1)
+    if 'iblrig' in anchor_path.name:
+        video_id = match.group(3)
+    else:
+        video_id = match.group(1)
     
     # Return all views for this video ID
     if video_id in video_dict:
@@ -221,12 +234,18 @@ def get_video_id_from_path(video_path):
         video_path = Path(video_path)
     
     filename = video_path.name
-    match = re.match(r'^(.+)_([^_]+)\.mp4$', filename)
+    if 'iblrig' in filename:
+        # iblrig dataset
+        match = re.match(r'^(.+)_([^_]+)\.downsampled.*\.([^.]+)\.mp4$', filename)
+    else:
+        match = re.match(r'^(.+)_([^_]+)\.mp4$', filename)
     
     if not match:
         raise ValueError(f"Video path {video_path} does not match expected format")
-    
-    return match.group(1)
+    if 'iblrig' in filename:
+        return match.group(3)
+    else:
+        return match.group(1)
 
 
 def plot_example_images(batch, results_dict, recon_num=8, save_path=None):

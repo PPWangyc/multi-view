@@ -27,6 +27,7 @@ def main():
     extension = 'png'
     # First get all video paths grouped by ID
     video_dict = get_video_paths_by_id(input_dir)
+
     # get first key of video_dict
     # Get available views from the first video entry
     first_video_views = next(iter(video_dict.values()))
@@ -45,6 +46,12 @@ def main():
         anchor_view = 'A'
         # get video paths only for anchor view
         anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
+    elif dataset == 'ibl-mouse-separate':
+        frames_per_video = 640
+        anchor_view = 'leftCamera'
+        # get video paths only for anchor view
+        anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
+        print(len(anchor_video_paths))
     else:
         raise ValueError(f'Dataset {dataset} not supported')
     total_frames = 0
