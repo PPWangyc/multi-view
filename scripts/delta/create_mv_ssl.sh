@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J create_mv_ssl
 #SBATCH --output=./create_mv_ssl_%j.out
-#SBATCH --account=beez-delta-cpu
+#SBATCH --account=bdeu-delta-cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --partition=cpu
