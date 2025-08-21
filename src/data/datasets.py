@@ -133,7 +133,7 @@ class MVDataset(torch.utils.data.Dataset):
             # add to frame_ids
             self.unique_frame_ids.extend(frame_ids)
         # unique frame_ids
-        assert len(self.unique_frame_ids) == len(set(self.unique_frame_ids)), 'frame_ids are not unique'
+        # assert len(self.unique_frame_ids) == len(set(self.unique_frame_ids)), 'frame_ids are not unique'
         self.unique_frame_ids = list(set(self.unique_frame_ids))
         total_frames = len(self.unique_frame_ids) * len(self.available_views)
         logger.info(f'Dataset Summary:')

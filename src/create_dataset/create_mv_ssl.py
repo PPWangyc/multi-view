@@ -47,7 +47,9 @@ def main():
         # get video paths only for anchor view
         anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
     elif dataset == 'ibl-mouse-separate':
-        frames_per_video = 640
+        frames_per_video = 800
+        # 67 videos, 2 views per video
+        # 2 * 67 * 800 = 107200 frames
         anchor_view = 'leftCamera'
         # get video paths only for anchor view
         anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
