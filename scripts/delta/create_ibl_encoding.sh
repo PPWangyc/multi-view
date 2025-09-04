@@ -28,4 +28,4 @@ python $script_path $script_args
 
 conda deactivate
 
-cd scripts/greene
+cd scripts/delta
