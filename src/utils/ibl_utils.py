@@ -938,14 +938,15 @@ def align_spike_behavior(binned_spikes, binned_behaviors, beh_names, trials_mask
 
     return aligned_binned_spikes, aligned_binned_behaviors, target_mask, del_idxs
 
-def load_video_index(one, eid, camera, intervals):
+def load_video_index(one, eid, camera, intervals=None, only_url=False):
     # get the remote video URL from eid
     urls = vidio.url_from_eid(eid, one=one)
     url = urls[camera]  # URL for the left camera
 
     # Example 2: get the video label from a video file path or URL
     label = vidio.label_from_path(url)
-    print(f'Using URL for the {label} camera: start loading')
+    if only_url:
+        return url
     """
     The preload function will by default pre-allocate the memory before loading the frames,
     and will return the frames as a numpy array of the shape (l, h, w, 3), where l = the number of

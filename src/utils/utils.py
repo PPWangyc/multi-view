@@ -80,6 +80,7 @@ def get_args():
     parser.add_argument('--model', type=str, default='mae', help='model to train on')
     parser.add_argument('--epochs', type=int, default=300, help='number of epochs to train for')
     parser.add_argument('--data_dir', type=str, default='data', help='path to data directory')
+    parser.add_argument('--eid', type=str, default=None, help='experiment id to train on')
     return parser.parse_args()
 
 def set_seed(seed):
