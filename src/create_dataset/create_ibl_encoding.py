@@ -57,6 +57,10 @@ def main(args):
     # sort the random indices
     RANDOM_VID_IDX.sort()
 
+    TRAIN_RATIO = 0.7
+    VAL_RATIO = 0.1
+    TEST_RATIO = 0.2
+
     OUTPUT_DIR = Path("data/encoding/ibl-mouse-separate")
 
     avail_views = ['left', 'right']
@@ -109,6 +113,14 @@ def main(args):
                 # select only the random video indices
                 view_idxs_list.append(view_interval_idxs)
             view_idxs_dict[view] = view_idxs_list
+        # number of trials
+        n_trials = len(intervals)
+        print(f"Session {eid} has {n_trials} trials, {binned_spikes.shape[-1]} neurons after selection.")
+        trial_idxs = np.random.choice(np.arange(n_trials), n_trials, replace=False)
+        train_idxs = trial_idxs[:int(n_trials*TRAIN_RATIO)]
+        val_idxs = trial_idxs[int(n_trials*TRAIN_RATIO):int(n_trials*(TRAIN_RATIO+VAL_RATIO))]
+        test_idxs = trial_idxs[int(n_trials*(TRAIN_RATIO+VAL_RATIO)):]
+        print(f"Train/Val/Test: {len(train_idxs)}/{len(val_idxs)}/{len(test_idxs)}")
 
         # process each trial
         for trial_idx in tqdm(range(len(intervals)), desc=f"Processing trial for session {eid} ({eid_idx+1}/{len(eids)})"):
@@ -151,10 +163,20 @@ def main(args):
                     'interval': intervals[trial_idx],
                 }
             }
-            save_path = os.path.join(OUTPUT_DIR, eid, f"{trial_idx}.npy")
+            if trial_idx in train_idxs:
+                mode = 'train'
+            elif trial_idx in val_idxs:
+                mode = 'val'
+            elif trial_idx in test_idxs:
+                mode = 'test'
+            else:
+                raise ValueError(f"Trial idx {trial_idx} not in train/val/test idxs")
+            # save the data
+            save_path = os.path.join(OUTPUT_DIR, eid, mode, f"{trial_idx}.npy")
             save_path = Path(save_path)
             save_path.parent.mkdir(parents=True, exist_ok=True)
             np.save(save_path, data)
+
 if __name__ == "__main__":
     args = get_args()
     set_seed(42)

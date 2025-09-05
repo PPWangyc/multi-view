@@ -4,8 +4,9 @@ import torch
 from pathlib import Path
 from typing import Callable
 import json
+import os
 from typeguard import typechecked
-from data.data_types import ExampleDict, MultiViewDict
+from data.data_types import ExampleDict, MultiViewDict, EncodingDict
 import pandas as pd
 import numpy as np
 from utils.log_utils import get_logger
@@ -232,10 +233,114 @@ class MVDataset(torch.utils.data.Dataset):
             output_view=output_view,
         )
 
+@typechecked
+class EncodingDataset(torch.utils.data.Dataset):
+    """Multi-view dataset that contains images."""
+
+    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None, mode: str) -> None:
+        """Initialize a multi-view dataset.
+
+        Parameters
+        ----------
+        data_dir: absolute path to data directory
+        imgaug_transform: imgaug transform pipeline to apply to images
+
+        """
+        self.data_dir = Path(os.path.join(data_dir, mode))
+        if not self.data_dir.is_dir():
+            raise ValueError(f'{self.data_dir} is not a directory')
+
+        # get npy files in data_dir
+        self.npy_files = sorted(list(self.data_dir.rglob('*.npy')))
+        if len(self.npy_files) == 0:
+            raise ValueError(f'{self.data_dir} does not contain npy files')
+        
+        total_trials = len(self.npy_files)
+        logger.info(f'Dataset Summary:')
+        logger.info(f'  • Mode: {mode}')
+        logger.info(f'  • Total trials (npy files): {total_trials}')
+
+        self.imgaug_pipeline = imgaug_pipeline
+        # send image to tensor, resize to canonical dimensions, and normalize
+        pytorch_transform_list = [
+            transforms.Resize((224, 224)),
+            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        ]
+        self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+
+    def __len__(self) -> int:
+        return len(self.npy_files)
+
+    def __getitem__(self, idx: int | list) -> EncodingDict | list[EncodingDict]:
+        """Get item(s) from dataset.
+
+        Parameters
+        ----------
+        idx: single index or list  indices
+
+        Returns
+        -------
+        Single MultiViewDict or list of MultiViewDict objects
+
+        """
+        # Handle batch of indices
+        if isinstance(idx, list):
+            return [self._get_single_item(i) for i in idx]
+        else:
+            # Handle single index
+            return self._get_single_item(idx)
+
+    def _get_single_item(self, idx: int) -> EncodingDict:
+        """Get a single item from the dataset."""
+        data = np.load(self.npy_files[idx], allow_pickle=True).item()
+        # process video views
+        for view in data['video']:
+            # read image from file and apply transformations (if any)
+            # if 1 color channel, change to 3.
+            data['video'][view] = torch.from_numpy(data['video'][view]).float()  
+            data['video'][view] /= 255.0  # normalize to [0, 1]
+            if len(data['video'][view].shape) == 3:
+                # (T, H, W) -> (T, 1, H, W) -> (T, 3, H, W)
+                data['video'][view] = data['video'][view].unsqueeze(1)
+                data['video'][view] = data['video'][view].repeat(1, 3, 1, 1)
+            # apply pytorch transforms
+            if self.pytorch_transform:
+                data['video'][view] = self.pytorch_transform(data['video'][view])
+        # sort data['video'] by view name
+        data['video'] = dict(sorted(data['video'].items()))
+        data['keypoints'] = dict(sorted(data['keypoints'].items()))
+        
+        # process keypoints views
+        input_keypoints_view = {}
+        discrete_keypoints_dict = {}
+        for view in data['keypoints']:
+            # sort data['keypoints'][view] by keypoint name
+            data['keypoints'][view] = dict(sorted(data['keypoints'][view].items()))
+            view_kps = []
+            for kp in data['keypoints'][view]:
+                # kp is (T)
+                data['keypoints'][view][kp] = torch.from_numpy(data['keypoints'][view][kp]).float()
+                view_kps.append(data['keypoints'][view][kp])
+            view_kps = torch.stack(view_kps, dim=1)  # (T, num_keypoints)
+            input_keypoints_view[view] = view_kps
+            discrete_keypoints_dict[view] = data['keypoints'][view]
+
+        # process spike
+        data['spike'] = torch.from_numpy(data['spike']).float()
+
+        return EncodingDict(
+            input_video_view=data['video'],
+            input_keypoints_view=input_keypoints_view,
+            input_discrete_keypoints_view=discrete_keypoints_dict,
+            spike=data['spike'],
+        )
+
 def main():
     dataset = BaseDataset(data_dir='../../data/ssl/mirror-mouse-separate', imgaug_pipeline=None)
     print(dataset[0].keys())
     dataset = MVDataset(data_dir='../../data/ssl/mirror-mouse-separate', imgaug_pipeline=None)
+    print(dataset[0].keys())
+    dataset = EncodingDataset(data_dir='../../data/encoding/ibl-mouse-separate', imgaug_pipeline=None, mode='train')
     print(dataset[0].keys())
 
 if __name__ == '__main__':

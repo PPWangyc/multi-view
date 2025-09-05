@@ -12,7 +12,6 @@ from utils.utils import (
     save_all_training_info,
     get_experiment_name,
 )
-from data.datasets import MVDataset
 from utils.log_utils import get_logger
 import torch
 from torch.utils.data import DataLoader
