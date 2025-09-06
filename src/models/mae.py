@@ -16,17 +16,16 @@ class VisionTransformer(torch.nn.Module):
 
     def forward(
         self,
-        x: Float[torch.Tensor, 'batch channels img_height img_width'],
+        x: dict,
     ) -> Dict[str, torch.Tensor]:
         x = x['image']
         results_dict = self.vit_mae(pixel_values=x, return_recon=True)
         return results_dict
 
     def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
-        x = batch_dict['image']
-        results_dict = self.forward(x)
+        results_dict = self.forward(batch_dict)
         if return_images:
-            results_dict['images'] = x
+            results_dict['images'] = batch_dict['image']
         return results_dict
 
     def compute_loss(
@@ -43,18 +42,18 @@ class VisionTransformer(torch.nn.Module):
         loss = mse_loss
         return loss
 
-    def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
+    def predict_step(self, batch_dict: dict) -> dict:
         # set mask_ratio to 0 for inference
         self.vit_mae.config.mask_ratio = 0
         # get model outputs
         results_dict = self.get_model_outputs(batch_dict, return_images=False)
         # reset mask_ratio to the original value
         self.vit_mae.config.mask_ratio = self.mask_ratio
-        results_dict['metadata'] = {
-            'video': batch_dict['video'],
-            'idx': batch_dict['idx'],
-            'image_paths': batch_dict['image_path'],
-        }
+        # results_dict['metadata'] = {
+        #     'video': batch_dict['video'],
+        #     'idx': batch_dict['idx'],
+        #     'image_paths': batch_dict['image_path'],
+        # }
         return results_dict
 
 class MVVisionTransformer(VisionTransformer):
@@ -82,6 +81,23 @@ class MVVisionTransformer(VisionTransformer):
             output_images=output_images, 
             return_recon=True
         )
+        return results_dict
+
+    def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
+        x = batch_dict['image']
+        latents, _ = self.vit_mae(pixel_values=x)
+        results_dict = {'latents': latents}
+        if return_images:
+            results_dict['images'] = x
+        return results_dict
+    
+    def predict_step(self, batch_dict: dict) -> dict:
+        # set mask_ratio to 0 for inference
+        self.vit_mae.config.mask_ratio = 0
+        # get model outputs
+        results_dict = self.get_model_outputs(batch_dict, return_images=False)
+        # reset mask_ratio to the original value
+        self.vit_mae.config.mask_ratio = self.mask_ratio
         return results_dict
 
 

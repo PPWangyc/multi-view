@@ -8,6 +8,9 @@ import re
 import matplotlib.pyplot as plt
 from models.mae import VisionTransformer, MVVisionTransformer
 from data.datasets import MVDataset, BaseDataset
+from utils.log_utils import get_logger
+
+logger = get_logger()
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225] 
@@ -352,7 +355,7 @@ def create_log_dir(experiment_name: str, base_dir: str = "logs") -> str:
     return log_dir_path
 
 
-def load_checkpoint_for_resume(checkpoint_path: str, accelerator, model, optimizer, scheduler, logger):
+def load_checkpoint_for_resume(checkpoint_path: str, accelerator, model, optimizer=None, scheduler=None, logger=None):
     """
     Load checkpoint for resuming training.
     

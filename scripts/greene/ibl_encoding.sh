@@ -12,7 +12,8 @@
 #SBATCH --constraint=h100|a100
 #SBATCH --export=ALL
 eid=$1
-config_file=$2
+model=$2
+dataset=ibl-mouse-separate
 start_time=$(date +%s)
 echo "Start time: $start_time"
 . ~/.bashrc
@@ -31,7 +32,9 @@ echo "Accelerate command is: $accelerate_cmd"
 # Script arguments
 script_args="
     --eid ${eid} \
-    --data_dir data/encoding/ibl-mouse-separate
+    --data_dir data/encoding/ibl-mouse-separate \
+    --config configs/encoding/${model}_${dataset}.yaml \
+    --batch_size 4 
 "
 $accelerate_cmd $script_path $script_args
 cd scripts/delta
