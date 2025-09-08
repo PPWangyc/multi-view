@@ -28,6 +28,7 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 NAME_MODEL = {
     'mae': VisionTransformer,
+    'svmae': VisionTransformer,
     'mvmae': MVVisionTransformer,
     'ijepa': 'facebook/vit-mae-base',
 }
@@ -990,7 +991,7 @@ def train_tcn_with_tune(
     analysis = tune.run(
         tune.with_parameters(
             train_tcn,
-            data_dict=encoding_dict,
+            encoding_dict=encoding_dict,
             test=False,
             tune=True,
             verbose=False,

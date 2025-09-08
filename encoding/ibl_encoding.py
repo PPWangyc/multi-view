@@ -85,21 +85,19 @@ def main(args):
         np.save(os.path.join(log_dir, 'encoding_dict.npy'), encoding_dict)
     # train encoding models with best validation hyperparameters BPS
     # train/val/test rrr with tuning
-    rrr_result = train_rrr_with_tune(encoding_dict, 2)
-    logger.info(f"RRR Encoding {eid} Test BPS: {rrr_result[eid]['bps']:.4f}, R2: {rrr_result[eid]['r2']:.4f}, VE: {rrr_result[eid]['ve']:.4f}")
+    rrr_result = train_rrr_with_tune(encoding_dict, 10)
+    logger.info(f"RRR Encoding {eid} Test BPS: {rrr_result['bps']:.4f}, R2: {rrr_result['r2']:.4f}, VE: {rrr_result['ve']:.4f}")
     # train/val/test tcn with tuning
-    tcn_result = train_tcn_with_tune(encoding_dict, 2)
-    logger.info(f"TCN Encoding {eid} Test BPS: {tcn_result[eid]['bps']:.4f}, R2: {tcn_result[eid]['r2']:.4f}, VE: {tcn_result[eid]['ve']:.4f}")
+    tcn_result = train_tcn_with_tune(encoding_dict, 10)
+    logger.info(f"TCN Encoding {eid} Test BPS: {tcn_result['bps']:.4f}, R2: {tcn_result['r2']:.4f}, VE: {tcn_result['ve']:.4f}")
     results_dict = {
         'rrr': rrr_result,
-        'cnn': None,
+        'tcn': tcn_result,
         'log_dir': log_dir,
         'eid': eid,
         'avail_views': avail_views,
     }
     np.save(os.path.join(log_dir, 'results_dict.npy'), results_dict)
-
-    
 
 if __name__ == "__main__":
     args = get_args()

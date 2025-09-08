@@ -4,8 +4,8 @@
 #SBATCH --partition=gpuA40x4,gpuA100x4,gpuA40x4-preempt,gpuA100x4-preempt
 #SBATCH --job-name="ibl-encoding"
 #SBATCH --output="ibl-encoding.%j.out"
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64g   
