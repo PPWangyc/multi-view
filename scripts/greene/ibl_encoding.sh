@@ -38,7 +38,7 @@ script_args="
 "
 $accelerate_cmd $script_path $script_args
 cd scripts/delta
-conda activate mv
+conda deactivate
 
 end_time=$(date +%s)
 echo "End time: $end_time"
