@@ -371,8 +371,8 @@ def bin_spiking_data(reg_clu_ids, neural_df, intervals=None, trials_df=None, n_w
         interval_len = (
             intervals[0,1] - intervals[0,0]
         )
-
-    # subselect spikes for this region
+    # remove intervals if contains nan
+    intervals = intervals[~np.isnan(intervals).any(axis=1)]
     spikemask = np.isin(neural_df['spike_clusters'], reg_clu_ids)
     regspikes = neural_df['spike_times'][spikemask]
     regclu = neural_df['spike_clusters'][spikemask]
