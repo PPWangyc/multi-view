@@ -104,6 +104,7 @@ def get_args():
     parser.add_argument('--data_dir', type=str, default='data', help='path to data directory')
     parser.add_argument('--eid', type=str, default=None, help='experiment id to train on')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size for training')
+    parser.add_argument('--avail_views', type=str, nargs='+', default=['bot', 'top'], help='available views for training')
     return parser.parse_args()
 
 def set_seed(seed):
@@ -648,9 +649,16 @@ def create_encoding_log(metadata):
     
     # Create log directory
     log_dir = os.path.join('logs', 'encoding', metadata['eid'])
+    resume_path = metadata.get('resume', None)
+    if resume_path is not None:
+        resume_path = resume_path.split('/')[-2]
 
     # sub-metadata for logging
-    log_dir = os.path.join(log_dir, f"{metadata['model']}_{metadata['resume']}")
+    log_dir = os.path.join(
+        log_dir,
+        f'views-{"".join(metadata["avail_views"])}', 
+        f'model-{metadata["model"]}',
+        f"resume-{resume_path}")
     os.makedirs(log_dir, exist_ok=True)
 
     return log_dir

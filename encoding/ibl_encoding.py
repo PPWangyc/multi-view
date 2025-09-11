@@ -33,13 +33,16 @@ def main(args):
     T = datasets[0][0]['spike'].shape[0]  # Assuming all trials have the same Time steps
     config['data']['avail_views'] = avail_views
     config['model']['model_params']['num_views'] = len(avail_views)
-    logger.info(f"Available views: {avail_views}")
-
+    logger.info(f"Available views: {avail_views} in IBL dataset")
+    avail_views = args.avail_views
+    logger.info(f"Using views: {avail_views} for encoding")
+    
     metadata = {
         'ds': 'ibl-mouse-separate',
         'eid': eid,
         'model': config['model']['name'],
         'resume': config['training']['resume'],
+        'avail_views': args.avail_views,
     }
     # create a log dir based on metadata
     log_dir = create_encoding_log(metadata)
@@ -68,7 +71,7 @@ def main(args):
                 logger.info(f"Running inference on {mode} set...")
                 spike = []
                 for trial_data in tqdm(dataset):
-                    for view in trial_data['input_video_view'].keys():
+                    for view in avail_views:
                         input_dict = {'image': trial_data['input_video_view'][view].to(accelerator.device)} # 
                         results_dict = model.predict_step(input_dict)
                         embeddings = results_dict['latents'].cpu().numpy()

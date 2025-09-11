@@ -13,7 +13,9 @@
 #SBATCH --export=ALL
 
 eid=$1
-model=$2
+model=$2 # mvmae / mae
+avail_views=$3 # left+right
+
 dataset=ibl-mouse-separate
 start_time=$(date +%s)
 echo "Start time: $start_time"
@@ -34,8 +36,10 @@ echo "Accelerate command is: $accelerate_cmd"
 script_args="
     --eid ${eid} \
     --data_dir data/encoding/ibl-mouse-separate \
-    --config configs/encoding/${model}_${dataset}.yaml
+    --config configs/encoding/${model}_${dataset}.yaml \
+    --avail_views ${avail_views}
 "
+echo "Script arguments are: $script_args"
 $accelerate_cmd $script_path $script_args
 cd scripts/delta
 conda deactivate
