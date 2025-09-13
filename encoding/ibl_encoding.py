@@ -75,6 +75,9 @@ def main(args):
                         input_dict = {'image': trial_data['input_video_view'][view].to(accelerator.device)} # 
                         results_dict = model.predict_step(input_dict)
                         embeddings = results_dict['latents'].cpu().numpy()
+                        if len(embeddings.shape) == 3:
+                            # take only cls token
+                            embeddings = embeddings[:, 0, :]  # (T, D)
                         encoding_dict[mode][view].append(embeddings)
                     spike.append(trial_data['spike'].numpy())
                 encoding_dict[mode]['spike'] = np.concatenate(spike, axis=0).reshape(len(dataset), T, -1)  

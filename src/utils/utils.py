@@ -764,7 +764,7 @@ def train_rrr(
     try:
         r2 = r2_score_sklearn(y_norm, y_pred_norm)
     except Exception as e:
-        logger.error(e)
+        logger.error(str(e))
         r2 = -100000
     
     logger.info(f"Co-BPS: {co_bps}")
