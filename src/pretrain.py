@@ -30,7 +30,7 @@ def main():
     config = load_config(args.config)
 
     # accelerate
-    accelerator = Accelerator()
+    accelerator = Accelerator(mixed_precision='bf16' if config['training']['use_bfloat16'] else 'no')
 
     # Create log directory
     if accelerator.is_main_process:
@@ -40,7 +40,7 @@ def main():
 
     # Initialize wandb
     use_wandb = config['training']['use_wandb']
-    if accelerator.is_main_process:
+    if accelerator.is_main_process and use_wandb:
         try:
             wandb.init(
                 project="multi-view-pretrain",
@@ -79,8 +79,7 @@ def main():
         pin_memory=True,
         drop_last=True,
     )
-    # model
-    model = NAME_MODEL[config['model']['name']](config)
+    
     # optimizer
     epochs = config.get('training').get('num_epochs') * num_views
     lr = config['optimizer']['lr']
@@ -98,8 +97,15 @@ def main():
         accumulate_grad_batches = max(1, config['optimizer']['accumulate_grad_batches'])
     total_steps = epochs * len(dataloader) // world_size // accumulate_grad_batches
     lr = lr * global_batch_size / 256 * accumulate_grad_batches # scale lr by global batch size
+    ipe = len(dataloader) // world_size // accumulate_grad_batches # iterations per epoch
+    config['training']['ipe'] = ipe
+    
+    # model
+    model = NAME_MODEL[config['model']['name']](config)
 
+    # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
     # scheduler
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer, 
@@ -189,11 +195,11 @@ def main():
         running_loss = 0.
         pbar = tqdm(dataloader, desc=f'Epoch {epoch+1}')
         for batch_idx, batch in enumerate(pbar):
-            # Forward pass
-            results_dict = model(batch)
-            loss = results_dict['loss']
-            running_loss += loss.item()
-            
+            with accelerator.autocast():
+                # Forward pass
+                results_dict = model(batch)
+                loss = results_dict['loss']
+                running_loss += loss.item()
             # Scale loss for gradient accumulation
             loss = loss / accumulate_grad_batches
             loss.backward()
@@ -203,6 +209,9 @@ def main():
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
+                # -- update target encoder for ijepa ---
+                if 'ijepa' in config['model']['name'].lower():
+                    model.update_target()
             
             # Update progress bar with current loss
             pbar.set_postfix({'loss': f'{loss.item() * accumulate_grad_batches:.4f}'})
@@ -252,8 +261,9 @@ def main():
                     json.dump(training_state, f, indent=2)
                 
                 # Save plots
-                plot_path = os.path.join(log_dir, "plots", f'epoch_{epoch+1}_step_{pbar.n}.png')
-                plot_example_images(batch, results_dict, recon_num=8, save_path=plot_path)
+                if config['training'].get('save_plots', False):
+                    plot_path = os.path.join(log_dir, "plots", f'epoch_{epoch+1}_step_{pbar.n}.png')
+                    plot_example_images(batch, results_dict, recon_num=8, save_path=plot_path)
             # save model every n epochs
             if epoch % save_every_n_epochs == 0:
                 if accelerator.is_main_process:

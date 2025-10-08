@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --account=beez-delta-gpu
-#SBATCH --partition=gpuA40x4,gpuA100x4,gpuA40x4-preempt,gpuA100x4-preempt
+#SBATCH --partition=gpuA100x4,gpuA100x4-preempt
 #SBATCH --job-name="pretrain"
 #SBATCH --output="pretrain.%j.out"
 #SBATCH --nodes=4

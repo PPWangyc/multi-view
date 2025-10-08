@@ -18,6 +18,7 @@ from models.mae import VisionTransformer, MVVisionTransformer
 from data.datasets import MVDataset, BaseDataset
 from utils.log_utils import get_logger
 from models.rrr import train_model_main
+from models.ijepa import vit_base, IJEPA
 from utils.metric_utils import bits_per_spike, compute_varexp
 
 
@@ -30,7 +31,7 @@ NAME_MODEL = {
     'mae': VisionTransformer,
     'svmae': VisionTransformer,
     'mvmae': MVVisionTransformer,
-    'ijepa': 'facebook/vit-mae-base',
+    'ijepa': IJEPA,
 }
 NAME_DATASET = {
     'mv': MVDataset,
