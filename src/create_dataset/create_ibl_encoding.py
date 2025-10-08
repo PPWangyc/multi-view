@@ -1,25 +1,15 @@
 import os
-import numpy as np
-from pathlib import Path
 import random
-from tqdm import tqdm
-from one.api import ONE
+from pathlib import Path
 
-from utils.ibl_utils import (
-    prepare_data,
-    bin_spiking_data,
-    list_brain_regions,
-    select_brain_regions,
-    load_video_index,
-    load_keypoints,
-    load_video,
-    resize_video,
-    load_keypoints
-)
-from utils.utils import (
-    set_seed,
-    get_args,
-)
+import numpy as np
+from one.api import ONE
+from tqdm import tqdm
+
+from utils.ibl_utils import (bin_spiking_data, list_brain_regions,
+                             load_keypoints, load_video, load_video_index,
+                             prepare_data, resize_video, select_brain_regions)
+from utils.utils import get_args, set_seed
 
 # ---------------
 # PREPROCESS DATA

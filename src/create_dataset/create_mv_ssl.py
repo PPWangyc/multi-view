@@ -1,21 +1,15 @@
-from beast.extraction import (
-    export_frames,
-    select_frame_idxs_kmeans
-)
-import os
 import json
-from utils.utils import (
-    get_args,
-    get_video_paths_by_id,
-    get_anchor_view_paths,
-    get_all_views_for_anchor,
-    get_video_id_from_path,
-    set_seed,
-    get_video_frame_num
-)
-from pathlib import Path
-import numpy as np
+import os
 from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+from beast.extraction import export_frames, select_frame_idxs_kmeans
+
+from utils.utils import (get_all_views_for_anchor, get_anchor_view_paths,
+                         get_args, get_video_frame_num, get_video_id_from_path,
+                         get_video_paths_by_id, set_seed)
+
 
 def main():
     args = get_args()

@@ -18,7 +18,7 @@ cd ../..
 conda activate vs
 
 dataset=$1 # fly-anipose, mirror-mouse-separate
-model=$2 # resnet50_animal_ap10k, vitb_imagenet, vitb-mv, vitb-sv
+model=$2 # resnet50_animal_ap10k, vitb_imagenet, vitb-mv, vitb-sv, ijepa-sv
 train_frame=$3 # 100, 1000
 seed=$4 # 0, 1, 2
 

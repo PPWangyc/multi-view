@@ -1,27 +1,20 @@
-from beast.io import load_config
-from beast.data.augmentations import imgaug_pipeline, expand_imgaug_str_to_dict
-from utils.utils import (
-    set_seed,
-    get_args,
-    NAME_MODEL,
-    NAME_DATASET,
-    plot_example_images,
-    create_log_dir,
-    load_checkpoint_for_resume,
-    get_resume_checkpoint_path,
-    save_all_training_info,
-    get_experiment_name,
-)
-from utils.log_utils import get_logger
+import json
+import os
+
 import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
+import wandb
 # accelerate
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
-import os
-import json
-import wandb
+from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
+from beast.io import load_config
+from tqdm import tqdm
+
+from utils.log_utils import get_logger
+from utils.utils import (NAME_DATASET, NAME_MODEL, create_log_dir, get_args,
+                         get_experiment_name, get_resume_checkpoint_path,
+                         load_checkpoint_for_resume, plot_example_images,
+                         save_all_training_info, set_seed)
 
 logger = get_logger()
 

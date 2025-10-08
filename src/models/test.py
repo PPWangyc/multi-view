@@ -1,6 +1,6 @@
-from transformers import AutoImageProcessor, IJepaModel
 import torch
 from datasets import load_dataset
+from transformers import AutoImageProcessor, IJepaModel
 
 dataset = load_dataset("huggingface/cats-image")
 image = dataset["test"]["image"][0]

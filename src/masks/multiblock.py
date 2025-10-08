@@ -6,12 +6,11 @@
 #
 
 import math
-
 from multiprocessing import Value
 
-from utils.log_utils import get_logger
-
 import torch
+
+from utils.log_utils import get_logger
 
 _GLOBAL_SEED = 0
 logger = get_logger()

@@ -1,27 +1,26 @@
-import os 
+import multiprocessing
+import os
 import sys
 import uuid
-from tqdm import *
+from functools import partial
+from pathlib import Path
+
+import brainbox.behavior.dlc as dlc
+import cv2
+import ibllib.io.video as vidio
+import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pathlib import Path
-import multiprocessing
-from functools import partial
-from scipy.interpolate import interp1d
-import cv2
-import imageio
-from PIL import Image
-
-import ibllib.io.video as vidio
-from iblutil.numerical import ismember, bincount2D
-import brainbox.behavior.dlc as dlc
-from brainbox.io.one import SpikeSortingLoader, SessionLoader
-from iblatlas.regions import BrainRegions
+from brainbox.io.one import SessionLoader, SpikeSortingLoader
 from brainbox.population.decode import get_spike_counts_in_bins
-
-import matplotlib.pyplot as plt
+from iblatlas.regions import BrainRegions
+from iblutil.numerical import bincount2D, ismember
 from matplotlib import animation
 from matplotlib.animation import FFMpegWriter
+from PIL import Image
+from scipy.interpolate import interp1d
+from tqdm import *
 
 
 def globalize(func):

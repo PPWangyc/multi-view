@@ -1,8 +1,11 @@
-from transformers import ViTMAEConfig, ViTMAEForPreTraining
-from transformers.models.vit_mae.modeling_vit_mae import ViTMAEDecoder, ViTMAEDecoderOutput
-import torch
 from typing import Dict, Optional
+
+import torch
 from jaxtyping import Float
+from transformers import ViTMAEConfig, ViTMAEForPreTraining
+from transformers.models.vit_mae.modeling_vit_mae import (ViTMAEDecoder,
+                                                          ViTMAEDecoderOutput)
+
 
 class VisionTransformer(torch.nn.Module):
     """Vision Transformer implementation."""

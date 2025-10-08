@@ -5,21 +5,18 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import copy
 import math
 from functools import partial
-import numpy as np
-import copy
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.tensor_utils import (
-    trunc_normal_,
-    repeat_interleave_batch
-)
 from masks.utils import apply_masks
 from utils.log_utils import get_logger
+from utils.tensor_utils import repeat_interleave_batch, trunc_normal_
 
 logger = get_logger()
 

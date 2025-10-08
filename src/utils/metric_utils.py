@@ -1,11 +1,12 @@
 # This file contains the implementation of the r2 score metric
-from torcheval.metrics import R2Score
+import logging
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
 from scipy.special import gammaln
-import logging
 from sklearn.metrics import r2_score as r2_score_sklearn
+from torcheval.metrics import R2Score
 
 logger = logging.getLogger(__name__)
 

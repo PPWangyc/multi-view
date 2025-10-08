@@ -1,26 +1,26 @@
+import argparse
+import copy
 import os
+import random
+import re
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from accelerate import Accelerator
+from facemap.neural_prediction.neural_model import KeypointsNetwork
+from ray import train, tune
 from scipy.ndimage import gaussian_filter1d
 from sklearn.metrics import r2_score as r2_score_sklearn
-from facemap.neural_prediction.neural_model import KeypointsNetwork
-import copy
-import numpy as np
-import random
-import argparse
-from pathlib import Path
-import re
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from ray import tune, train
-from accelerate import Accelerator
 
-from models.mae import VisionTransformer, MVVisionTransformer
-from data.datasets import MVDataset, BaseDataset
-from utils.log_utils import get_logger
+from data.datasets import BaseDataset, MVDataset
+from models.ijepa import IJEPA, vit_base
+from models.mae import MVVisionTransformer, VisionTransformer
 from models.rrr import train_model_main
-from models.ijepa import vit_base, IJEPA
+from utils.log_utils import get_logger
 from utils.metric_utils import bits_per_spike, compute_varexp
-
 
 logger = get_logger()
 
@@ -360,7 +360,7 @@ def create_log_dir(experiment_name: str, base_dir: str = "logs") -> str:
         # Returns: "logs/2024_01_15_14_30_25_mae_pretrain"
     """
     import datetime
-    
+
     # Create timestamp
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     
@@ -438,9 +438,9 @@ def save_training_config(config: dict, training_info: dict, log_dir: str, logger
     Returns:
         str: Path to the saved configuration file
     """
-    import json
     import datetime
-    
+    import json
+
     # Create a comprehensive configuration dictionary
     training_config = {
         "original_config": config,
@@ -473,7 +473,7 @@ def save_training_config_summary(training_info: dict, log_dir: str, logger=None)
         str: Path to the saved summary file
     """
     import datetime
-    
+
     # Create a readable summary
     summary_lines = [
         "=" * 60,
@@ -534,11 +534,11 @@ def save_environment_info(args, log_dir: str, logger=None):
     Returns:
         str: Path to the saved environment info file
     """
-    import json
     import datetime
-    import sys
+    import json
     import platform
-    
+    import sys
+
     # Collect environment information
     env_info = {
         "timestamp": datetime.datetime.now().isoformat(),
