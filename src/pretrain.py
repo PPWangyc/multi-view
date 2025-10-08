@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 # accelerate
 from accelerate import Accelerator
+from accelerate.utils import DistributedDataParallelKwargs
 import os
 import json
 import wandb
@@ -30,7 +31,11 @@ def main():
     config = load_config(args.config)
 
     # accelerate
-    accelerator = Accelerator(mixed_precision='bf16' if config['training']['use_bfloat16'] else 'no')
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(
+        kwargs_handlers=[kwargs],
+        mixed_precision='bf16' if config['training']['use_bfloat16'] else 'no'
+    )
 
     # Create log directory
     if accelerator.is_main_process:
@@ -209,9 +214,12 @@ def main():
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
-                # -- update target encoder for ijepa ---
+                # -- update target encoder for ijepa (DDP/Accelerate-safe) ---
                 if 'ijepa' in config['model']['name'].lower():
-                    model.update_target()
+                    if hasattr(model, 'update_target'):
+                        model.update_target()
+                    elif hasattr(model, 'module') and hasattr(model.module, 'update_target'):
+                        model.module.update_target()
             
             # Update progress bar with current loss
             pbar.set_postfix({'loss': f'{loss.item() * accumulate_grad_batches:.4f}'})
