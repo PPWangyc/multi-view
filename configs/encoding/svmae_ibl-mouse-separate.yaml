@@ -45,7 +45,7 @@ training:
   save_every_n_epochs: 100
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
-  resume: logs/ds-mirror-mouse-separate_model-vitb-sv/model.safetensors
+  resume: logs/ds-ibl-mouse-separate_model-svmae-b/model.safetensors
   # resume: null
   resume_from_best: false
 

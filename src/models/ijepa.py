@@ -454,7 +454,7 @@ class IJEPA(nn.Module):
         ema = config['model']['model_params']['ema']
         ipe_scale = config['training']['ipe_scale']
         num_epochs = config['training']['num_epochs']
-        ipe = config['training']['ipe']
+        ipe = config['training'].get('ipe', 1)
         self.momentum_scheduler = (ema[0] + i*(ema[1]-ema[0])/(ipe*num_epochs*ipe_scale)
                             for i in range(int(ipe*num_epochs*ipe_scale)+1))
 
@@ -537,6 +537,16 @@ class IJEPA(nn.Module):
             'loss': loss,
             'h': h,
             'z': z
+        }
+        return result_dict
+    
+    def predict_step(self, batch_dict) -> dict:
+        x = batch_dict['image']
+        z = self.encoder(x, masks=None)
+        # mean pooling
+        z = z.mean(dim=1)
+        result_dict = {
+            'latents': z,
         }
         return result_dict
 

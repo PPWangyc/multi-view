@@ -1,6 +1,6 @@
 # model configuration
 model:
-  name: ijepa
+  name: svijepa
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
@@ -22,7 +22,7 @@ model:
     decoder_hidden_size: 512
     decoder_num_hidden_layers: 8
     decoder_intermediate_size: 2048
-    mask_ratio: 0.75 # 0 for no masking, usually 0.75 (MAE)
+    mask_ratio: 0 # 0 for no masking, usually 0.75 (MAE)
     norm_pix_loss: False
 
     embed_size: 768 # projected embedding size, used for contrastive learning
@@ -56,8 +56,8 @@ training:
   save_every_n_epochs: 100
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
-  # resume: logs/2025_08_06_22_07_14_mvmae_mv_fly-anipose_pretrain
-  resume: null
+  resume: logs/ds-ibl-mouse-separate_model-svijepa-b/model.safetensors
+  # resume: null
   resume_from_best: false
 
   expected_batch_size: 1024 # if null, use the default value from the optimizer

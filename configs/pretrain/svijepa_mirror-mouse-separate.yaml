@@ -1,6 +1,6 @@
 # model configuration
 model:
-  name: svmae
+  name: svijepa
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
@@ -27,6 +27,17 @@ model:
 
     embed_size: 768 # projected embedding size, used for contrastive learning
 
+    predictor_embed_dim: 384 # predictor dimension
+    predictor_depth: 6      # predictor depth
+    num_predictor_masks: 4 # number of masked views for predictor
+    num_encoder_masks: 1   # number of masked views for encoder
+    min_keep: 4          # minimum number of unmasked patches
+    allow_overlap: False  # allow overlap between masked views
+
+    ema:
+    - 0.996
+    - 1.0
+    
 # training configuration
 training:
   seed: 0
@@ -34,21 +45,27 @@ training:
   train_batch_size: 256    # per GPU
   val_batch_size: 1024
   test_batch_size: 128
-  num_epochs: 800
+  num_epochs: 300
   num_workers: 16  # Number of CPU workers for the DataLoader
   num_gpus: 1
   num_nodes: 1
   # frequency to log training metrics
   log_every_n_steps: 10
   log_every_n_epochs: 20
+  # frequency to save model
+  save_every_n_epochs: 100
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
   resume: null
   resume_from_best: false
 
   expected_batch_size: 1024 # if null, use the default value from the optimizer
-
   use_wandb: true
+
+  save_plots: false
+
+  ipe_scale: 1.0
+
   use_bfloat16: true
 
 # optimizer configuration

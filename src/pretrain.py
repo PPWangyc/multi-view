@@ -8,6 +8,7 @@ from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
 from beast.io import load_config
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from utils.log_utils import get_logger

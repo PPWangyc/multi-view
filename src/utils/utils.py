@@ -31,6 +31,7 @@ NAME_MODEL = {
     'mae': VisionTransformer,
     'svmae': VisionTransformer,
     'mvmae': MVVisionTransformer,
+    'svijepa': IJEPA,
     'ijepa': IJEPA,
 }
 NAME_DATASET = {

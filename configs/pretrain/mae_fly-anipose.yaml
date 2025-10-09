@@ -1,6 +1,6 @@
 # model configuration
 model:
-  name: mae
+  name: svmae
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
