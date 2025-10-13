@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --account=beez-delta-gpu
-#SBATCH --partition=gpuA40x4, gpuA40x4-preempt
+#SBATCH --partition=gpuA40x4,gpuA40x4-preempt
 #SBATCH --job-name="ibl-encoding"
 #SBATCH --output="ibl-encoding.%j.out"
 #SBATCH --nodes=1
