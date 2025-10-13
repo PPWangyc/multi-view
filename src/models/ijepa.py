@@ -430,6 +430,11 @@ class VisionTransformer(nn.Module):
         pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_emb.unsqueeze(0), pos_embed), dim=1)
 
+def load_ddp_weights(model, state_dict):
+    # -- loading DDP checkpoint
+    for k, v in state_dict.items():
+        model.state_dict()[k[len("module."):]].copy_(v)
+
 class IJEPA(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -443,6 +448,16 @@ class IJEPA(nn.Module):
             depth=config['model']['model_params']['predictor_depth'],
             num_heads=self.encoder.num_heads,
         )
+        # -- init from checkpoint
+        if config['model']['checkpoint']:
+            logger.info(f'Loading pretrained IJepa weights from {config["model"]["checkpoint"]}')
+            checkpoint = torch.load(config['model']['checkpoint'], map_location='cpu')
+            load_ddp_weights(self.encoder, checkpoint['encoder'])
+            load_ddp_weights(self.target_encoder, checkpoint['target_encoder'])
+            load_ddp_weights(self.predictor, checkpoint['predictor'])
+        else:
+            logger.warning('Initializing IJepa weights from scratch!')
+
         # ijepa specific params
         self.allow_overlap = config['model']['model_params']['allow_overlap']
         self.height, self.width = config['model']['model_params']['image_size'] // config['model']['model_params']['patch_size'], config['model']['model_params']['image_size'] // config['model']['model_params']['patch_size']

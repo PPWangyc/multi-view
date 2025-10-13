@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --account=beez-delta-gpu
-#SBATCH --partition=gpuA40x4,gpuA100x4,gpuA40x4-preempt,gpuA100x4-preempt
+#SBATCH --partition=gpuA40x4, gpuA40x4-preempt
 #SBATCH --job-name="ibl-encoding"
 #SBATCH --output="ibl-encoding.%j.out"
 #SBATCH --nodes=1
@@ -13,7 +13,7 @@
 #SBATCH --export=ALL
 
 eid=$1
-model=$2 # mvmae / mae
+model=$2 # mvmae / svmae / mae / ijepa / svijepa
 avail_views=$3 # left+right
 
 dataset=ibl-mouse-separate

@@ -2,7 +2,7 @@
 model:
   name: ijepa
   seed: 0
-  checkpoint: null  # load weights from checkpoint
+  checkpoint: data/checkpoints/ijepa/vitb16.224-bs.2048-ep.300/jepa-latest.pth.tar # prertrained ijepa weights from ImageNet or elsewhere for initialization  # load weights from checkpoint
   model_class: vit
   model_params:
     hidden_size: 768
