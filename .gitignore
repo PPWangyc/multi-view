@@ -13,3 +13,5 @@ outputs/
 ds-*.yaml
 checkpoints/
 *read_results.ipynb*
+samurai/
+*samurai*
