@@ -291,6 +291,11 @@ def create_visualization_videos(
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Load predictions file to get model name from metadata
+    pred_data = load_predictions(predictions_file)
+    metadata = pred_data.get('metadata', {})
+    model_name = metadata.get('model_name', 'Unknown Model')
+    
     # Group matched data by (video_id, frame_idx) to merge annotations on same frame
     video_frames = defaultdict(lambda: defaultdict(list))
     for (ann_id, video_id, frame_idx), match_info in matched_data.items():
@@ -311,6 +316,7 @@ def create_visualization_videos(
         # Collect all frames with all annotations
         pred_visualized_frames = []
         gt_visualized_frames = []
+        frame_indices = []  # Track frame indices for labeling
         
         for frame_idx, ann_data_list in sorted_frames:
             # Get frame path from first annotation (all annotations on same frame share same path)
@@ -385,6 +391,7 @@ def create_visualization_videos(
                     labels=pred_labels
                 )
                 pred_visualized_frames.append(pred_frame)
+                frame_indices.append(frame_idx)  # Store frame index
             
             if gt_masks:
                 gt_frame = overlay_multiple_masks_and_bboxes(
@@ -406,18 +413,23 @@ def create_visualization_videos(
         num_frames = min(len(pred_visualized_frames), len(gt_visualized_frames))
         pred_visualized_frames = pred_visualized_frames[:num_frames]
         gt_visualized_frames = gt_visualized_frames[:num_frames]
+        frame_indices = frame_indices[:num_frames]  # Trim frame_indices to match
         
         # Add text labels to frames
         pred_labeled_frames = []
         gt_labeled_frames = []
         
-        for pred_frame, gt_frame in zip(pred_visualized_frames, gt_visualized_frames):
-            # Add "Prediction" label to top frame
+        for idx, (pred_frame, gt_frame) in enumerate(zip(pred_visualized_frames, gt_visualized_frames)):
+            # Get frame number
+            frame_num = frame_indices[idx] if idx < len(frame_indices) else idx
+            
+            # Add "Prediction" label with model name and frame number to top frame
+            prediction_text = f'Prediction: {model_name} | Frame num: {frame_num}'
             pred_labeled = add_text_label(
                 pred_frame,
-                'Prediction',
+                prediction_text,
                 position='top-left',
-                font_scale=1.0,
+                font_scale=0.6,
                 thickness=2,
                 bg_color=(0, 0, 255),  # Red background
                 text_color=(255, 255, 255)  # White text
@@ -429,7 +441,7 @@ def create_visualization_videos(
                 gt_frame,
                 'Ground Truth',
                 position='top-left',
-                font_scale=1.0,
+                font_scale=0.6,
                 thickness=2,
                 bg_color=(0, 255, 0),  # Green background
                 text_color=(255, 255, 255)  # White text
