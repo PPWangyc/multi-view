@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -128,7 +128,7 @@ def _check_mouse_separation(mask1: np.ndarray, mask2: np.ndarray, kps1: dict, kp
                            img_w: int, img_h: int) -> Dict[str, float]:
     """Check if keypoints for each mouse fall in separate connected components."""
     from scipy.ndimage import label
-    
+
     # Combine both masks
     combined_mask = ((mask1 > 0) | (mask2 > 0)).astype(int)
     labeled, num_components = label(combined_mask)

@@ -1,5 +1,6 @@
 # This file contains the implementation of the r2 score metric
 import logging
+from typing import Dict
 
 import numpy as np
 import torch
@@ -261,3 +262,130 @@ def compute_neuron_metrics(data_dict, metrics=["bps", "r2", "ve"], norm=True):
         r2 = r2_score_sklearn(y_true=_gt, y_pred=_pred, multioutput="raw_values")
         results["r2"] = r2
     return results
+
+
+# ============================================================================
+# Mask and Bounding Box Evaluation Metrics
+# ============================================================================
+
+def compute_mask_iou(mask1: np.ndarray, mask2: np.ndarray) -> float:
+    """Compute Intersection over Union between two binary masks.
+    
+    Args:
+        mask1: Binary mask (H, W) with dtype uint8
+        mask2: Binary mask (H, W) with dtype uint8
+    
+    Returns:
+        IoU score between 0 and 1
+    """
+    intersection = np.logical_and(mask1, mask2).sum()
+    union = np.logical_or(mask1, mask2).sum()
+    if union == 0:
+        return 1.0 if intersection == 0 else 0.0
+    return float(intersection) / float(union)
+
+
+def compute_bbox_iou(bbox1: np.ndarray, bbox2: np.ndarray) -> float:
+    """Compute IoU between two bounding boxes in [x, y, w, h] format.
+    
+    Args:
+        bbox1: Bounding box [x, y, w, h]
+        bbox2: Bounding box [x, y, w, h]
+    
+    Returns:
+        IoU score between 0 and 1
+    """
+    x1, y1, w1, h1 = bbox1
+    x2, y2, w2, h2 = bbox2
+    
+    # Convert to [x0, y0, x1, y1] format
+    x1_min, y1_min = x1, y1
+    x1_max, y1_max = x1 + w1, y1 + h1
+    x2_min, y2_min = x2, y2
+    x2_max, y2_max = x2 + w2, y2 + h2
+    
+    # Compute intersection
+    inter_x_min = max(x1_min, x2_min)
+    inter_y_min = max(y1_min, y2_min)
+    inter_x_max = min(x1_max, x2_max)
+    inter_y_max = min(y1_max, y2_max)
+    
+    if inter_x_max <= inter_x_min or inter_y_max <= inter_y_min:
+        return 0.0
+    
+    inter_area = (inter_x_max - inter_x_min) * (inter_y_max - inter_y_min)
+    box1_area = w1 * h1
+    box2_area = w2 * h2
+    union_area = box1_area + box2_area - inter_area
+    
+    if union_area == 0:
+        return 1.0 if inter_area == 0 else 0.0
+    
+    return float(inter_area) / float(union_area)
+
+
+def mask_to_bbox(mask: np.ndarray) -> np.ndarray:
+    """Compute bounding box from binary mask using min/max of foreground pixels.
+    
+    Args:
+        mask: Binary mask (H, W) with dtype uint8 (1 = foreground, 0 = background)
+    
+    Returns:
+        Bounding box [x, y, w, h] in COCO format as numpy array
+    """
+    if mask.sum() == 0:
+        # Empty mask, return zero bbox
+        return np.array([0.0, 0.0, 0.0, 0.0])
+    
+    # Find foreground pixel coordinates
+    y_coords, x_coords = np.where(mask > 0)
+    
+    x_min = float(x_coords.min())
+    y_min = float(y_coords.min())
+    x_max = float(x_coords.max())
+    y_max = float(y_coords.max())
+    
+    # Convert to [x, y, w, h] format
+    return np.array([x_min, y_min, x_max - x_min + 1, y_max - y_min + 1])
+
+
+def compute_precision_recall_f1(
+    pred_mask: np.ndarray,
+    gt_mask: np.ndarray
+) -> Dict[str, float]:
+    """Compute precision, recall, and F1 score for binary masks.
+    
+    Args:
+        pred_mask: Predicted binary mask (H, W)
+        gt_mask: Ground truth binary mask (H, W)
+    
+    Returns:
+        Dictionary with 'precision', 'recall', 'f1' scores
+    """
+    intersection = np.logical_and(pred_mask, gt_mask).sum()
+    pred_positive = pred_mask.sum()
+    gt_positive = gt_mask.sum()
+    
+    # Precision = TP / (TP + FP)
+    if pred_positive == 0:
+        precision = 1.0 if gt_positive == 0 else 0.0
+    else:
+        precision = float(intersection) / float(pred_positive)
+    
+    # Recall = TP / (TP + FN)
+    if gt_positive == 0:
+        recall = 1.0 if pred_positive == 0 else 0.0
+    else:
+        recall = float(intersection) / float(gt_positive)
+    
+    # F1 = 2 * (precision * recall) / (precision + recall)
+    if precision + recall == 0:
+        f1 = 0.0
+    else:
+        f1 = 2.0 * (precision * recall) / (precision + recall)
+    
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
