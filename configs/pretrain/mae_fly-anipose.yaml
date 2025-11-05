@@ -45,8 +45,12 @@ training:
   check_val_every_n_epoch: 5
   resume: null
   resume_from_best: false
+  # frequency to save model
+  save_every_n_epochs: 100
+  save_plots: true
+  save_plots_every_n_epochs: 10
 
-  expected_batch_size: 1024 # if null, use the default value from the optimizer
+  effective_batch_size: 1024 # if null, use the default value from the optimizer
 
   use_wandb: true
   use_bfloat16: true
@@ -55,7 +59,7 @@ training:
 optimizer:
   type: AdamW
   accumulate_grad_batches: 1
-  lr: 5.e-5
+  lr: 1.5e-5 # 5.e-5
   wd: 0.05
   warmup_pct: 0.15 # cosine/linear
   gamma: 0.95     # step

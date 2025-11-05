@@ -60,7 +60,7 @@ training:
   # resume: null
   resume_from_best: false
 
-  expected_batch_size: 1024 # if null, use the default value from the optimizer
+  effective_batch_size: 1024 # if null, use the default value from the optimizer
   use_wandb: true
 
   save_plots: false

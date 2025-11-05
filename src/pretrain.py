@@ -69,6 +69,24 @@ def main():
     config['data']['avail_views'] = dataset.available_views if config['data']['name'] == 'mv' else None
     train_batch_size = config['training']['train_batch_size']
     
+    # get world size
+    world_size = accelerator.num_processes
+    global_batch_size = train_batch_size * world_size
+    
+    # adjust batch size and gradient accumulation based on effective_batch_size
+    effective_batch_size = config['training'].get('effective_batch_size')
+    if effective_batch_size is not None:
+        # If effective_batch_size < global_batch_size, reduce train_batch_size
+        if effective_batch_size < global_batch_size:
+            train_batch_size = max(1, effective_batch_size // world_size)
+            global_batch_size = train_batch_size * world_size
+            logger.info(f"Adjusted train_batch_size to {train_batch_size} to match effective_batch_size {effective_batch_size}")
+        
+        # Calculate gradient accumulation to reach effective_batch_size
+        accumulate_grad_batches = max(1, effective_batch_size // global_batch_size)
+    else:
+        accumulate_grad_batches = max(1, config['optimizer'].get('accumulate_grad_batches', 1))
+    
     # dataloader
     dataloader = DataLoader(
         dataset, 
@@ -82,18 +100,10 @@ def main():
     # optimizer
     epochs = config.get('training').get('num_epochs') * num_views
     lr = config['optimizer']['lr']
-    # get world size
-    world_size = accelerator.num_processes
-    global_batch_size = train_batch_size * world_size
     weight_decay = config['optimizer']['wd']
     
     log_every_n_epochs = config['training']['log_every_n_epochs'] * num_views # log every n epochs
     save_every_n_epochs = config['training']['save_every_n_epochs'] * num_views # save every n epochs
-    expected_batch_size = config['training']['expected_batch_size']
-    if expected_batch_size is not None:
-        accumulate_grad_batches = max(1, expected_batch_size // global_batch_size)
-    else:
-        accumulate_grad_batches = max(1, config['optimizer']['accumulate_grad_batches'])
     total_steps = epochs * len(dataloader) // world_size // accumulate_grad_batches
     lr = lr * global_batch_size / 256 * accumulate_grad_batches # scale lr by global batch size
     ipe = len(dataloader) // world_size // accumulate_grad_batches # iterations per epoch
