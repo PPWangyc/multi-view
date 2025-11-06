@@ -15,9 +15,10 @@ from scipy.ndimage import gaussian_filter1d
 from sklearn.metrics import r2_score as r2_score_sklearn
 from tqdm import tqdm
 
-from data.datasets import BaseDataset, MVDataset
+from data.datasets import BaseDataset, MVDataset, MVTDataset
 from models.ijepa import IJEPA, vit_base
 from models.mae import MVVisionTransformer, VisionTransformer
+from models.mvt import MultiViewTransformer
 from models.rrr import train_model_main
 from utils.log_utils import get_logger
 from utils.metric_utils import bits_per_spike, compute_varexp
@@ -33,9 +34,11 @@ NAME_MODEL = {
     'mvmae': MVVisionTransformer,
     'svijepa': IJEPA,
     'ijepa': IJEPA,
+    'mvt': MultiViewTransformer,
 }
 NAME_DATASET = {
     'mv': MVDataset,
+    'mvt': MVTDataset,
     'base': BaseDataset,
 }
 
@@ -107,6 +110,7 @@ def get_args():
     parser.add_argument('--eid', type=str, default=None, help='experiment id to train on')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size for training')
     parser.add_argument('--avail_views', type=str, nargs='+', default=['bot', 'top'], help='available views for training')
+    parser.add_argument('--model_type', type=str, default='sv', help='litpose model type to train on')
     return parser.parse_args()
 
 def set_seed(seed):

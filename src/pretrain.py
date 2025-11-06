@@ -64,9 +64,9 @@ def main():
         imgaug_pipeline=None,
     )
     # number of views
-    num_views = len(dataset.available_views) if config['data']['name'] == 'mv' else 1
-    config['model']['model_params']['num_views'] = num_views if config['data']['name'] == 'mv' else None
-    config['data']['avail_views'] = dataset.available_views if config['data']['name'] == 'mv' else None
+    num_views = len(dataset.available_views) if 'mv' in config['data']['name'] else 1
+    config['model']['model_params']['num_views'] = num_views if 'mv' in config['data']['name'] else None
+    config['data']['avail_views'] = dataset.available_views if 'mv' in config['data']['name'] else None
     train_batch_size = config['training']['train_batch_size']
     
     # get world size
@@ -111,6 +111,12 @@ def main():
     
     # model
     model = NAME_MODEL[config['model']['name']](config)
+    model.to(accelerator.device)
+    # TODO: Fix MultiViewTransformer Dataset Loading
+    dummy_input = torch.randn(2 * num_views, 3, 224, 224).to(accelerator.device)
+    print(model)
+    outputs = model({'image': dummy_input})
+    exit()
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -163,8 +169,8 @@ def main():
         "effective_batch_size": global_batch_size * accumulate_grad_batches,
         "dataset_size": len(dataset),
         "steps_per_epoch": len(dataloader),
-        "available_views": dataset.available_views if config['data']['name'] == 'mv' else None,
-        "num_views": len(dataset.available_views) if config['data']['name'] == 'mv' else None,
+        "available_views": dataset.available_views if 'mv' in config['data']['name'] else None,
+        "num_views": len(dataset.available_views) if 'mv' in config['data']['name'] else None,
         "weight_decay": weight_decay,
         "warmup_percentage": config['optimizer']['warmup_pct'],
         "scheduler_type": "OneCycleLR",

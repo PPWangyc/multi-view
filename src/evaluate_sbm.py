@@ -8,20 +8,12 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from data.sbm_ds import decode_rle_segmentation
-from utils.metric_utils import (
-    compute_mask_iou,
-    compute_bbox_iou,
-    mask_to_bbox,
-    compute_precision_recall_f1
-)
-from utils.viz_utils import (
-    create_visualization_video,
-    generate_colors,
-    overlay_multiple_masks_and_bboxes,
-    create_video_from_frames,
-    stack_frames_vertically,
-    add_text_label
-)
+from utils.metric_utils import (compute_bbox_iou, compute_mask_iou,
+                                compute_precision_recall_f1, mask_to_bbox)
+from utils.viz_utils import (add_text_label, create_video_from_frames,
+                             create_visualization_video, generate_colors,
+                             overlay_multiple_masks_and_bboxes,
+                             stack_frames_vertically)
 
 # Configure logging
 logging.basicConfig(

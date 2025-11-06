@@ -4,44 +4,36 @@ data:
     height: 256
     width: 256
   # ABSOLUTE path to data directory
-  data_dir: /scratch/yl6624/Project/multi-view/data/mirror-mouse-separate
+  data_dir: /scratch/yl6624/video-spike/data/crim13
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: ${data.data_dir}/videos
+  video_dir: ${data.data_dir}/videos_InD
   # location of labels; for example script, this should be relative to `data_dir`
-  csv_file:
-    - CollectedData_top.csv
-    - CollectedData_bot.csv
-  view_names:
-    - top
-    - bot
-  # downsample heatmaps - 2 | 3
-  downsample_factor: 2
-  # total number of keypoints
-  num_keypoints: 7
-  # keypoint names
+  csv_file: labels.csv
+  # total number of body parts
+  num_keypoints: 14
   keypoint_names:
-    - paw1LH
-    - paw2LF
-    - paw3RF
-    - paw4RH
-    - tailBase
-    - tailMid
-    - nose
-  # for mirrored setups with all keypoints defined in same csv file, define matching
-  # columns for different keypoints (assumes x-y-x-y interleaving)
-  # each list corresponds to a single view, so in the example below there are 2 views
-  # keypoint 0 is from view 0 and matches up with keypoint 8 from view 2
-  # columns that correspond to keypoints only labeled in a single view are omitted
-  # TODO: what if a keypoint is labeled in more than 1 but not all views?
-  # this info is only used for the multiview pca loss
-  mirrored_column_matches: [0, 1, 2, 3, 4, 5, 6]
-  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6]
+    - black_mouse_nose
+    - black_mouse_right_ear
+    - black_mouse_left_ear
+    - black_mouse_top_of_neck
+    - black_mouse_right_rear_knee
+    - black_mouse_left_rear_knee
+    - black_mouse_base_of_tail
+    - white_mouse_nose
+    - white_mouse_right_ear
+    - white_mouse_left_ear
+    - white_mouse_top_of_neck
+    - white_mouse_right_rear_knee
+    - white_mouse_left_rear_knee
+    - white_mouse_base_of_tail
+  mirrored_column_matches: null
+  columns_for_singleview_pca: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 training:
   # select from one of several predefined image/video augmentation pipelines
   # default- resizing only
   # dlc- imgaug pipeline implemented in DLC 2.0 package
-  # dlc-top-down- dlc augmentations plus vertical and horizontal flips
+  # dlc-top-down- curated subset of dlc augmentations with more conservative param settings
   imgaug: dlc
   # batch size of labeled data during training
   train_batch_size: 8
@@ -57,13 +49,15 @@ training:
   # >1 - number of total train frames used for training
   train_frames: 1
   # number of gpus to train a single model
-  num_gpus: 1
+  num_gpus: 4
   # number of cpu workers for data loaders
   num_workers: 8
   # epochs over which to assess validation metrics for early stopping
   early_stop_patience: 3
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
+  # dropout in final layers
+  dropout_rate: 0.1
   # max training epochs; training may exit before due to early stopping
   min_epochs: 300
   max_epochs: 300
@@ -75,6 +69,11 @@ training:
   rng_seed_data_pt: 0
   # rng seed for weight initialization
   rng_seed_model_pt: 0
+  # optimizer: Adam | AdamW.
+  # Recommended to use Adam for resnet backbones, and AdamW for ViT backbones.
+  optimizer: Adam
+  optimizer_params:
+    learning_rate: 1e-3
   # learning rate scheduler
   # multisteplr | [todo - reducelronplateau]
   lr_scheduler: multisteplr
@@ -82,60 +81,43 @@ training:
     multisteplr:
       milestones: [150, 200, 250]
       gamma: 0.5
-  uniform_heatmaps_for_nan_keypoints: true
-  optimizer_params:
-    learning_rate: 0.0001
 
 model:
   # list of unsupervised losses
-  # "pca_singleview" | "pca_multiview" | "temporal" | "unimodal_mse" | "unimodal_kl"
   losses_to_use: []
-  # backbone network:
-  # resnet18 | resnet34 | resnet50 | resnet101 | resnet152 | resnet50_contrastive
-  # resnet50_animalpose_apose | resnet50_animal_ap10k
-  # resnet50_human_jhmdb | resnet50_human_res_rle | resnet50_human_top_res
-  # efficientnet_b0 | efficientnet_b1 | efficientnet_b2
+  # backbone network
   backbone: resnet50_animal_ap10k
-  # prediction mode - "heatmap" | "regression" | "heatmap_mhcrnn"
+  # prediction mode: regression | heatmap | heatmap_mhcrnn (context)
   model_type: heatmap
   # which heatmap loss to use
-  # "mse" | "kl" | "js"
   heatmap_loss_type: mse
-  # tt expt name
-  model_name: test_model
+  # directory name for model saving
+  model_name: rebuttal23a
 
 dali:
   general:
-    seed: 123456
+    seed: 0
   base:
     train:
-      sequence_length: 32
+      sequence_length: 32 # step = sequence_length by default. done internally
     predict:
-      sequence_length: 128
+      # (train_batch_size + base.train.sequence_length) * 2 -> round down to nearest pow of 2
+      sequence_length: 128 # step = sequence_length by default. done internally.
   context:
-    train:
+    train: # defaults: sequence_length=5, step=sequence_length
       batch_size: 16
-    predict:
+    predict: # defaults: sequence_length=5, step=1
       sequence_length: 96
 
 losses:
   # loss = projection onto the discarded eigenvectors
-  pca_multiview:
-    # weight in front of PCA loss
-    log_weight: 5.0
-    # predictions whould lie within the low-d subspace spanned by these components
-    components_to_keep: 3
-    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
-    # parameter takes precedence over `empirical_epsilon_percentile`
-    epsilon: null
-  # loss = projection onto the discarded eigenvectors
   pca_singleview:
     # weight in front of PCA loss
     log_weight: 5.0
-    # predictions whould lie within the low-d subspace spanned by components that describe this fraction of variance
+    # predictions should lie within the low-d subspace spanned by components that describe this fraction of variance
     components_to_keep: 0.99
-    # absolute error (in pixels) below which pca loss is zeroed out; if not null, this
-    # parameter takes precedence over `empirical_epsilon_percentile`
+    # absolute error (in pixels) below which pca loss is zeroed out; if null, an empirical
+    # epsilon is computed using the labeled data
     epsilon: null
   # loss = norm of distance between successive timepoints
   temporal:
@@ -149,33 +131,29 @@ losses:
     prob_threshold: 0.05
 
 eval:
-  # predict? used in scripts/train_hydra.py
-  predict_vids_after_training: true
-  # str with an absolute path to a directory containing videos for prediction.
-  test_videos_directory: ${data.video_dir}
-  # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py
-  save_vids_after_training: false
-  # matplotlib sequential or diverging colormap name for prediction visualization
-  # sequential options: viridis, plasma, magma, inferno, cool, etc.
-  # diverging options: RdBu, coolwarm, Spectral, etc.
-  colormap: "cool"
-  # confidence threshold for plotting a vid
-  confidence_thresh_for_vid: 0.90
-
   # paths to the hydra config files in the output folder, OR absolute paths to such folders.
-  # used in scripts/predict_new_vids.py and scripts/create_fiftyone_dataset.py
   hydra_paths: [" "]
-
+  # predict?
+  predict_vids_after_training: true
+  # save .mp4?
+  save_vids_after_training: false
   fiftyone:
-    # will be the name of the dataset (Mongo DB) created by FiftyOne
-    dataset_name: test
+    # will be the name of the dataset (Mongo DB) created by FiftyOne. for video dataset, we will append dataset_name + "_video"
+    dataset_name: crim13
     # if you want to manually provide a different model name to be displayed in FiftyOne
     model_display_names: ["test_model"]
     # whether to launch the app from the script (True), or from ipython (and have finer control over the outputs)
     launch_app_from_script: false
+
     remote: true # for LAI, must be False
     address: 127.0.0.1 # ip to launch the app on.
     port: 5151 # port to launch the app on.
+
+  # str with an absolute path to a directory containing videos for prediction.
+  # (it's not absolute just for the toy example)
+  test_videos_directory: ${data.data_dir}/videos_OOD
+  # confidence threshold for plotting a vid
+  confidence_thresh_for_vid: 0.90
 
 callbacks:
   anneal_weight:
@@ -187,4 +165,7 @@ callbacks:
 
 hydra:
   run:
-    dir: /home/zeus/content/lightning-pose/configs/litpose/
+    dir: /scratch/yl6624/video-spike/outputs/mirror-mouse/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    # sweep:
+    #   dir: /media/mattw/behavior/results/pose-estimation/mirror-mouse/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    #   subdir: ${hydra.job.num}

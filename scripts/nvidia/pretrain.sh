@@ -14,32 +14,47 @@
 config_file=$1
 start_time=$(date +%s)
 echo "Start time: $start_time"
-. ~/.bashrc
+source ~/.bashrc
 
-# Initialize conda for non-interactive shell (needed for sbatch)
-# Check if conda.sh exists and source it
-if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-fi
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
 
 cd ../..
 
 conda activate mv
 
-# Get the script path
+# ============================================================================
+# GPU Setup (Reusable pattern - copy this block to other scripts)
+# ============================================================================
+# Check available GPUs and configure CUDA_VISIBLE_DEVICES
+gpu_info=$(scripts/nvidia/check_avail_gpu.sh)
+num_processes=$(echo "$gpu_info" | head -n 1)
+available_devices=$(echo "$gpu_info" | tail -n 1)
+
+# Set CUDA_VISIBLE_DEVICES to available GPUs (or unset if no GPUs available)
+if [ -n "$available_devices" ] && [ "$num_processes" -ge 1 ]; then
+    export CUDA_VISIBLE_DEVICES="$available_devices"
+    echo "Using $num_processes GPU(s): $available_devices"
+else
+    unset CUDA_VISIBLE_DEVICES
+    echo "WARNING: No GPUs available. Falling back to CPU."
+fi
+
+# Get accelerate command (respects CUDA_VISIBLE_DEVICES if set)
+if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
+    accelerate_cmd=$(CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" ./scripts/setup_multi_gpu.sh)
+else
+    accelerate_cmd=$(./scripts/setup_multi_gpu.sh)
+fi
+# ============================================================================
+
+# Script configuration
 script_path=src/pretrain.py
-
-# Get the accelerate command from the setup script
-accelerate_cmd=$(./scripts/setup_multi_gpu.sh)
-echo "Accelerate command is: $accelerate_cmd"
-
-# Script arguments
 script_args="
     --config configs/pretrain/${config_file}.yaml
 "
+echo "Accelerate command: $accelerate_cmd"
 $accelerate_cmd $script_path $script_args
+
 cd scripts/nvidia
 conda deactivate
 

@@ -13,13 +13,7 @@ dataset=$1
 
 . ~/.bashrc
 
-# Initialize conda for non-interactive shell (needed for sbatch)
-# Check if conda.sh exists and source it
-if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-fi
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
 
 cd ../..
 

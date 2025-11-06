@@ -2,15 +2,14 @@
 
 import argparse
 import os
+import shutil
+import subprocess
 import sys
 import time
-import urllib.request
 import urllib.error
-import shutil
+import urllib.request
 import zipfile
-import subprocess
 from pathlib import Path
-
 
 DEFAULT_URL = "https://figshare.com/ndownloader/files/39698587"
 DEFAULT_FILENAME = "sebea_dataset.zip"

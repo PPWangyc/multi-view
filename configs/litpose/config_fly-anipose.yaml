@@ -6,7 +6,7 @@ data:
   # ABSOLUTE path to data directory
   data_dir: /scratch/yl6624/Project/multi-view/data/fly-anipose
   # ABSOLUTE path to unlabeled videos' directory
-  video_dir: /scratch/yl6624/Project/multi-view/data/fly-anipose/videos
+  video_dir: ${data.data_dir}/videos
   # location of labels; for example script, this should be relative to `data_dir`
   csv_file:
     - CollectedData_Cam-A.csv
@@ -22,7 +22,7 @@ data:
     - Cam-D
     - Cam-E
     - Cam-F
-  camera_params_file: /scratch/yl6624/Project/multi-view/data/fly-anipose/calibrations.csv
+  camera_params_file: ${data.data_dir}/calibrations.csv
   # downsample heatmaps - 2 | 3
   downsample_factor: 2
   # total number of keypoints
@@ -91,7 +91,7 @@ training:
   # number of gpus to train a single model
   num_gpus: 1
   # number of cpu workers for data loaders
-  num_workers: 4
+  num_workers: 8
   # epoch at which backbone network weights begin updating
   unfreezing_epoch: 20
   # max training epochs; training may exit before due to early stopping
@@ -115,6 +115,14 @@ training:
   uniform_heatmaps_for_nan_keypoints: true
   optimizer_params:
     learning_rate: 0.0001
+
+  # randomly mask out patches during training to make model more robust to occlusions
+  # set `final_ratio: 0.0` to skip patch masking
+  patch_mask:
+    init_epoch: 40
+    final_epoch: 300
+    init_ratio: 0.0
+    final_ratio: 0.0
 
 model:
   # list of unsupervised losses

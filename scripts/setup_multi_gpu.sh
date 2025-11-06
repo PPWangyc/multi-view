@@ -15,8 +15,26 @@ else
     # Running directly
     echo "Running directly" >&2
     # get num of GPUs
-    num_gpus=$(nvidia-smi --query-gpu=gpu_name --format=csv,noheader | wc -l)
-    echo "Number of GPUs is $num_gpus" >&2
+    # If CUDA_VISIBLE_DEVICES is set and not empty, count those GPUs; otherwise count all GPUs
+    # Check if CUDA_VISIBLE_DEVICES is set and not empty (after trimming whitespace)
+    cuda_devices="${CUDA_VISIBLE_DEVICES:-}"
+    cuda_devices_trimmed="${cuda_devices// /}"
+    
+    if [ -n "$cuda_devices_trimmed" ]; then
+        echo "CUDA_VISIBLE_DEVICES is set to: $CUDA_VISIBLE_DEVICES" >&2
+        # Count GPUs from CUDA_VISIBLE_DEVICES
+        num_gpus=$(python -c "import os; devs = os.environ.get('CUDA_VISIBLE_DEVICES', ''); print(len([d for d in devs.split(',') if d.strip()]) if devs else 0)")
+        if [ "$num_gpus" -eq 0 ]; then
+            echo "WARNING: CUDA_VISIBLE_DEVICES is set but empty, using all GPUs" >&2
+            num_gpus=$(nvidia-smi --query-gpu=gpu_name --format=csv,noheader | wc -l)
+        else
+            echo "Number of GPUs from CUDA_VISIBLE_DEVICES is $num_gpus" >&2
+        fi
+    else
+        echo "CUDA_VISIBLE_DEVICES is not set or empty, using all GPUs" >&2
+        num_gpus=$(nvidia-smi --query-gpu=gpu_name --format=csv,noheader | wc -l)
+        echo "Number of GPUs is $num_gpus" >&2
+    fi
     main_node_ip=$ip_addr
     num_gpus_per_node=$num_gpus
     num_nodes=1
