@@ -4,8 +4,8 @@
 #SBATCH --output="litpose.%j.out"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=4
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus=2
+#SBATCH --gpus-per-task=2
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=256g
 #SBATCH --time=48:00:00
@@ -49,6 +49,7 @@ data_dir=${pwd}/data/${dataset}
 # GPU Setup (Reusable pattern - copy this block to other scripts)
 # ============================================================================
 # Check available GPUs and configure CUDA_VISIBLE_DEVICES
+# This script handles both SLURM and non-SLURM environments
 gpu_info=$(scripts/nvidia/check_avail_gpu.sh)
 num_processes=$(echo "$gpu_info" | head -n 1)
 available_devices=$(echo "$gpu_info" | tail -n 1)
@@ -56,7 +57,6 @@ available_devices=$(echo "$gpu_info" | tail -n 1)
 # Set CUDA_VISIBLE_DEVICES to available GPUs (or unset if no GPUs available)
 if [ -n "$available_devices" ] && [ "$num_processes" -ge 1 ]; then
     export CUDA_VISIBLE_DEVICES="$available_devices"
-    echo "Using $num_processes GPU(s): $available_devices"
 else
     unset CUDA_VISIBLE_DEVICES
     echo "WARNING: No GPUs available. Falling back to CPU."
