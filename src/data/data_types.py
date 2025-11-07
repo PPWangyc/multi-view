@@ -20,6 +20,7 @@ class MultiViewDict(TypedDict):
     input_image: Union[
         Float[Tensor, 'channels image_height image_width'],
         Float[Tensor, 'batch channels image_height image_width'],
+        Float[Tensor, 'batch view channels image_height image_width']
     ]
     output_image: Union[
         Float[Tensor, 'channels image_height image_width'],

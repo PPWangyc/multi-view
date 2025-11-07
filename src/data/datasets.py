@@ -254,7 +254,7 @@ class MVTDataset(torch.utils.data.Dataset):
         # read info.txt
         with open(self.data_dir / 'info.json', 'r') as f:
             self.info = json.load(f)
-        self.available_views = self.info['available_views']
+        self.available_views = sorted(self.info['available_views'])
         self.video_ids = self.info['video_ids']
 
         # read all csv files in data_dir
@@ -336,44 +336,28 @@ class MVTDataset(torch.utils.data.Dataset):
         unique_frame_id = self.unique_frame_ids[idx]
 
         # random a number between 0 and len(self.available_views)
-        input_view_idx = np.random.randint(0, len(self.available_views))
-        input_view = self.available_views[input_view_idx]
-        input_view_path = self.frame_id_to_path[unique_frame_id][input_view]
-        
-        output_view_idx = np.random.randint(0, len(self.available_views))
-        output_view = self.available_views[output_view_idx]
-        output_view_path = self.frame_id_to_path[unique_frame_id][output_view]
-
-        # read image from file and apply transformations (if any)
-        # if 1 color channel, change to 3.
-        input_image = Image.open(input_view_path).convert('RGB')
-        output_image = Image.open(output_view_path).convert('RGB')
-        if self.imgaug_pipeline is not None:
-            # expands add batch dim for imgaug
-            input_transformed_images = self.imgaug_pipeline(images=np.expand_dims(input_image, axis=0))
-            output_transformed_images = self.imgaug_pipeline(images=np.expand_dims(output_image, axis=0))
-            # get rid of the batch dim
-            input_transformed_images = input_transformed_images[0]
-            output_transformed_images = output_transformed_images[0]
-        else:
-            input_transformed_images = input_image
-            output_transformed_images = output_image
-
-        input_transformed_images = self.pytorch_transform(input_transformed_images)
-        output_transformed_images = self.pytorch_transform(output_transformed_images)
-
+        input_view_dict = {}
+        for view in self.available_views:
+            input_view_path = self.frame_id_to_path[unique_frame_id][view]
+            input_image = Image.open(input_view_path).convert('RGB')
+            if self.imgaug_pipeline is not None:
+                # expands add batch dim for imgaug
+                input_transformed_images = self.imgaug_pipeline(images=np.expand_dims(input_image, axis=0))
+                # get rid of the batch dim
+                input_transformed_images = input_transformed_images[0]
+            else:
+                input_transformed_images = input_image
+            input_transformed_images = self.pytorch_transform(input_transformed_images)
+            input_view_dict[view] = input_transformed_images
+        input_image = torch.stack([input_view_dict[view] for view in self.available_views], dim=0) # shape (view, batch, channels, img_height, img_width)
+        output_image = input_image.clone() # shape (view, batch, channels, img_height, img_width)
         return MultiViewDict(
-            input_image=input_transformed_images,  # shape (3, img_height, img_width)
-            output_image=output_transformed_images,  # shape (3, img_height, img_width)
+            input_image=input_image,  # shape (view, batch, channels, img_height, img_width)
+            output_image=output_image,  # shape (batch, view, channels, img_height, img_width)
             video_id=unique_frame_id.split('/')[0],
             frame_id=unique_frame_id.split('/')[1],
             idx=idx,
-            input_image_path=str(input_view_path),
-            output_image_path=str(output_view_path),
-            input_view=input_view,
-            output_view=output_view,
         )
-
 
 @typechecked
 class EncodingDataset(torch.utils.data.Dataset):

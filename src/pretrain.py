@@ -64,8 +64,8 @@ def main():
         imgaug_pipeline=None,
     )
     # number of views
-    num_views = len(dataset.available_views) if 'mv' in config['data']['name'] else 1
-    config['model']['model_params']['num_views'] = num_views if 'mv' in config['data']['name'] else None
+    num_views = len(dataset.available_views) if 'mv' == config['data']['name'] else 1
+    config['model']['model_params']['num_views'] = num_views if 'mv' == config['data']['name'] else None
     config['data']['avail_views'] = dataset.available_views if 'mv' in config['data']['name'] else None
     train_batch_size = config['training']['train_batch_size']
     
@@ -86,7 +86,7 @@ def main():
         accumulate_grad_batches = max(1, effective_batch_size // global_batch_size)
     else:
         accumulate_grad_batches = max(1, config['optimizer'].get('accumulate_grad_batches', 1))
-    
+
     # dataloader
     dataloader = DataLoader(
         dataset, 
@@ -108,15 +108,10 @@ def main():
     lr = lr * global_batch_size / 256 * accumulate_grad_batches # scale lr by global batch size
     ipe = len(dataloader) // world_size // accumulate_grad_batches # iterations per epoch
     config['training']['ipe'] = ipe
-    
+    dataloader = accelerator.prepare(dataloader)
+    batch = next(iter(dataloader))
     # model
     model = NAME_MODEL[config['model']['name']](config)
-    model.to(accelerator.device)
-    # TODO: Fix MultiViewTransformer Dataset Loading
-    dummy_input = torch.randn(2 * num_views, 3, 224, 224).to(accelerator.device)
-    print(model)
-    outputs = model({'image': dummy_input})
-    exit()
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)

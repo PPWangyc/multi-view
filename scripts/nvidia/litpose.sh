@@ -4,8 +4,8 @@
 #SBATCH --output="litpose.%j.out"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=1
-#SBATCH --gpus-per-task=1
+#SBATCH --gpus=4
+#SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=256g
 #SBATCH --time=48:00:00
@@ -102,8 +102,38 @@ litpose_args="
 
 echo "Litpose arguments: $litpose_args"
 
-# Run litpose train
-litpose train $litpose_args
+# Run litpose train with torchrun for multi-GPU support
+# When num_processes > 1, use torchrun to launch multiple processes
+# This ensures that multiple processes are started, one per GPU
+if [ "$num_processes" -gt 1 ]; then
+    echo "Launching with torchrun using $num_processes processes"
+    # Find a free port for distributed training
+    MASTER_PORT=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+    export MASTER_PORT
+    export MASTER_ADDR=localhost
+    echo "MASTER_PORT=$MASTER_PORT, MASTER_ADDR=$MASTER_ADDR"
+    # Create a temporary Python wrapper script to launch litpose
+    # This is needed because torchrun expects a Python script, not a CLI command
+    wrapper_script=$(mktemp /tmp/litpose_wrapper_XXXXXX.py)
+    cat > "$wrapper_script" << EOF
+import subprocess
+import sys
+
+# Run litpose train command with arguments
+# Arguments are passed via command line
+cmd = ['litpose', 'train'] + sys.argv[1:]
+print(f"Running command: {' '.join(cmd)}", flush=True)
+subprocess.run(cmd, check=True)
+EOF
+    # Use torchrun to launch multiple processes
+    # torchrun will set up the distributed environment automatically
+    # Pass arguments directly to the wrapper script
+    torchrun --nproc_per_node=$num_processes --standalone "$wrapper_script" $litpose_args
+    rm -f "$wrapper_script"
+else
+    echo "Launching with single process"
+    litpose train $litpose_args
+fi
 
 cd scripts/nvidia
 conda deactivate
