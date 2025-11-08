@@ -33,6 +33,8 @@ class MultiViewDict(TypedDict):
     output_image_path: Union[str, list[str]]
     input_view: Union[str, list[str]]
     output_view: Union[str, list[str]]
+    input_view_paths: Union[list[str], list[list[str]]]
+    output_view_paths: Union[list[str], list[list[str]]]
 
 class EncodingDict(TypedDict):
     """

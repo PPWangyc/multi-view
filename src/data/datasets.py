@@ -337,8 +337,10 @@ class MVTDataset(torch.utils.data.Dataset):
 
         # random a number between 0 and len(self.available_views)
         input_view_dict = {}
+        input_view_paths = []
         for view in self.available_views:
             input_view_path = self.frame_id_to_path[unique_frame_id][view]
+            input_view_paths.append(str(input_view_path))
             input_image = Image.open(input_view_path).convert('RGB')
             if self.imgaug_pipeline is not None:
                 # expands add batch dim for imgaug
@@ -357,6 +359,7 @@ class MVTDataset(torch.utils.data.Dataset):
             video_id=unique_frame_id.split('/')[0],
             frame_id=unique_frame_id.split('/')[1],
             idx=idx,
+            input_view_paths=input_view_paths,
         )
 
 @typechecked
