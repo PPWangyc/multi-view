@@ -4,8 +4,8 @@
 #SBATCH --output="pretrain.%j.out"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=8
-#SBATCH --gpus-per-task=8
+#SBATCH --gpus=4
+#SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=256g
 #SBATCH --time=UNLIMITED

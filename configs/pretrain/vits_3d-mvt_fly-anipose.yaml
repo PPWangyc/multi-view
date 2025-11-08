@@ -25,7 +25,7 @@ model:
     decoder_intermediate_size: 2048
     mask_ratio: 0.75 # 0 for no masking, usually 0.75 (MAE)
     norm_pix_loss: False
-    decoder_num_channels: 3 # 3 for RGB
+    decoder_num_channels: 7 # 3 for RGB, 1 for depth, 3 for world coordinates
 
 
 # training configuration
@@ -74,4 +74,6 @@ data:
   output_mod:
     [
       "rgb",
+      "depth",
+      "world_points",
     ]

@@ -62,6 +62,7 @@ def main():
     dataset = NAME_DATASET[config['data']['name']](
         data_dir=config['data']['data_dir'],
         imgaug_pipeline=None,
+        config=config
     )
     # number of views
     num_views = len(dataset.available_views) if 'mv' == config['data']['name'] else 1

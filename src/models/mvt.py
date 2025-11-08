@@ -15,16 +15,14 @@ class MultiViewTransformer(torch.nn.Module):
         super().__init__()
         # Set up ViT architecture
         self.config = ViTMAEConfig(**config['model']['model_params'])
-        # self.vit_mae = ViTMAE(self.vit_mae_config).from_pretrained("facebook/vit-mae-base")
         self.mask_ratio = config['model']['model_params']['mask_ratio']
         self.avail_views = config['data']['avail_views']
         self.num_views = len(self.avail_views)
-        self.vit = ViTModel.from_pretrained(config['model']['pretrained'])
+        self.vit = ViTModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
+
         # fix sin-cos embedding
         self.vit.embeddings.position_embeddings.requires_grad = False
         
-        self.view2idx = {view: idx for idx, view in enumerate(self.avail_views)}
-        self.idx2view = {idx: view for view, idx in self.view2idx.items()}
         h = w = config['model']['model_params']['image_size'] // config['model']['model_params']['patch_size']
         self.num_patches = h * w
         self.hidden_size = config['model']['model_params']['hidden_size']
@@ -39,10 +37,10 @@ class MultiViewTransformer(torch.nn.Module):
                 Pixel values.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size*num_views, num_patches, patch_size**2 * num_channels)`:
+            `torch.FloatTensor` of shape `(batch_size, num_patches * num_views, patch_size**2 * num_channels)`:
                 Patchified pixel values.
         """
-        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
         # sanity checks
         if pixel_values.shape[2] != num_channels:
             raise ValueError(
@@ -75,7 +73,7 @@ class MultiViewTransformer(torch.nn.Module):
             `torch.FloatTensor` of shape `(batch_size, num_views, num_channels, height, width)`:
                 Pixel values.
         """
-        patch_size, num_channels = self.config.patch_size, self.config.num_channels
+        patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
         original_image_size = (
             original_image_size
             if original_image_size is not None
@@ -103,7 +101,8 @@ class MultiViewTransformer(torch.nn.Module):
         )
         patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
         pixel_values = patchified_pixel_values.reshape(
-            batch_size * num_views,
+            batch_size,
+            num_views,
             num_channels,
             num_patches_h * patch_size,
             num_patches_w * patch_size,
@@ -113,9 +112,9 @@ class MultiViewTransformer(torch.nn.Module):
     def forward_loss(self, pixel_values, pred, mask):
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_views, num_channels, height, width)`):
                 Pixel values.
-            pred (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            pred (`torch.FloatTensor` of shape `(batch_size, num_patches * num_views, patch_size**2 * num_channels)`:
                 Predicted pixel values.
             mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
@@ -245,6 +244,13 @@ class MultiViewTransformer(torch.nn.Module):
 class MultiViewTransformerDecoder(ViTMAEDecoder):
     def __init__(self, config, num_patches, num_views):
         super().__init__(config, num_patches) # 196 is the number of patches in the decoder
+
+        # re-initialize the decoder_pred based on the decoder_num_channels
+        self.decoder_pred = nn.Linear(
+            config.decoder_hidden_size, config.patch_size**2 * config.decoder_num_channels, bias=True
+        )  # encoder to decoder
+
+        # re-initialize the decoder position embeddings per view
         decoder_pos_embed_dict = {}
         for i in range(num_views):
             decoder_pos_embed_dict[i] = torch.from_numpy(

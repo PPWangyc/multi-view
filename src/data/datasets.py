@@ -238,13 +238,14 @@ class MVDataset(torch.utils.data.Dataset):
 class MVTDataset(torch.utils.data.Dataset):
     """Multi-view dataset that contains images."""
 
-    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None) -> None:
+    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None, config: dict = None) -> None:
         """Initialize a multi-view dataset.
 
         Parameters
         ----------
         data_dir: absolute path to data directory
         imgaug_transform: imgaug transform pipeline to apply to images
+        config: configuration dictionary containing output_mod and 3d_data_dir
 
         """
         self.data_dir = Path(data_dir)
@@ -308,6 +309,15 @@ class MVTDataset(torch.utils.data.Dataset):
             transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
         ]
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+        
+        # Read output_mod from config
+        self.config = config or {}
+        self.output_mod = self.config.get('data', {}).get('output_mod', ['rgb'])
+        if isinstance(self.output_mod, str):
+            self.output_mod = [self.output_mod]
+        
+        # Log output_mod configuration
+        logger.info(f'Output modes: {self.output_mod}')
 
     def __len__(self) -> int:
         return len(self.unique_frame_ids)
@@ -334,6 +344,8 @@ class MVTDataset(torch.utils.data.Dataset):
     def _get_single_item(self, idx: int) -> MultiViewDict:
         """Get a single item from the dataset."""
         unique_frame_id = self.unique_frame_ids[idx]
+        video_id = unique_frame_id.split('/')[0]
+        frame_id = unique_frame_id.split('/')[1]
 
         # random a number between 0 and len(self.available_views)
         input_view_dict = {}
@@ -351,16 +363,122 @@ class MVTDataset(torch.utils.data.Dataset):
                 input_transformed_images = input_image
             input_transformed_images = self.pytorch_transform(input_transformed_images)
             input_view_dict[view] = input_transformed_images
-        input_image = torch.stack([input_view_dict[view] for view in self.available_views], dim=0) # shape (view, batch, channels, img_height, img_width)
-        output_image = input_image.clone() # shape (view, batch, channels, img_height, img_width)
+        input_image = torch.stack([input_view_dict[view] for view in self.available_views], dim=0) # shape (view, channels, img_height, img_width)
+        
+        # Build output_image based on output_mod
+        output_channels = []
+        for mode in self.output_mod:
+            if mode == 'rgb':
+                # RGB channels from input_image
+                output_channels.append(input_image)  # shape (view, 3, H, W)
+            elif mode == 'depth':
+                # Load depth from 3D data
+                depth_data = self._load_3d_data(video_id, frame_id, 'depth')
+                output_channels.append(depth_data)  # shape (view, 1, H, W)
+            elif mode == 'world_points':
+                # Load world_points from 3D data
+                world_points_data = self._load_3d_data(video_id, frame_id, 'world_points')
+                output_channels.append(world_points_data)  # shape (view, 3, H, W)
+            else:
+                raise ValueError(f'Unknown output mode: {mode}')
+        
+        # Concatenate all channels
+        if len(output_channels) == 1:
+            output_image = output_channels[0]
+        else:
+            output_image = torch.cat(output_channels, dim=1)  # shape (view, total_channels, H, W)
         return MultiViewDict(
-            input_image=input_image,  # shape (view, batch, channels, img_height, img_width)
-            output_image=output_image,  # shape (batch, view, channels, img_height, img_width)
-            video_id=unique_frame_id.split('/')[0],
-            frame_id=unique_frame_id.split('/')[1],
+            input_image=input_image,  # shape (view, channels, img_height, img_width)
+            output_image=output_image,  # shape (view, channels, img_height, img_width)
+            video_id=video_id,
+            frame_id=frame_id,
             idx=idx,
             input_view_paths=input_view_paths,
         )
+    
+    def _load_3d_data(self, video_id: str, frame_id: str, data_type: str) -> torch.Tensor:
+        """Load 3D data (depth or world_points) from .npy file.
+        
+        Parameters
+        ----------
+        video_id : str
+            Video identifier
+        frame_id : str
+            Frame identifier (e.g., "img_00000001.png")
+        data_type : str
+            Type of data to load: 'depth' or 'world_points'
+        
+        Returns
+        -------
+        torch.Tensor
+            Tensor with shape (num_views, channels, height, width)
+            - depth: (num_views, 1, 224, 224)
+            - world_points: (num_views, 3, 224, 224)
+        """
+        # Convert frame_id to 3D frame_id format matching create_3d_ssl.py
+        # Original create_3d_ssl.py does: frame_id = frame_id.split('.')[0][3:], then frame_id = '3d_'+frame_id
+        # So: "img_00000001.png" -> "img_00000001" -> "_00000001" -> "3d__00000001"
+        # But this seems odd, let's match the exact logic:
+        frame_id_base = frame_id.split('.')[0]  # Remove extension: "img_00000001.png" -> "img_00000001"
+        frame_id_3d = '3d_' + frame_id_base[3:]  # Remove first 3 chars and add "3d_" prefix
+        
+        # Load .npy file
+        npy_path = self.data_dir / video_id / f"{frame_id_3d}.npy"
+        if not npy_path.exists():
+            raise FileNotFoundError(f'3D data file not found: {npy_path}')
+        
+        data_dict = np.load(npy_path, allow_pickle=True).item()
+        
+        # Check view order if metadata is available
+        if 'metadata' in data_dict and 'view_list' in data_dict['metadata']:
+            saved_view_list = data_dict['metadata']['view_list']
+            if saved_view_list != self.available_views:
+                logger.warning(f'View order mismatch in {npy_path}. '
+                           f'Saved views: {saved_view_list}, Dataset views: {self.available_views}. '
+                           f'Assuming the data is in the correct order based on dataset.available_views.')
+        
+        # Extract the requested data type
+        if data_type not in data_dict:
+            raise KeyError(f'Data type {data_type} not found in {npy_path}. Available keys: {list(data_dict.keys())}')
+        
+        data = data_dict[data_type]  # numpy array
+        
+        # Convert to torch tensor
+        # Handle both numpy array and torch tensor (in case it was saved as tensor)
+        if isinstance(data, torch.Tensor):
+            data_tensor = data.float()
+        else:
+            data_tensor = torch.from_numpy(data).float()
+        
+        # The saved data from create_3d_ssl.py is already in format (S, C, H, W) where:
+        # - depth: (S, 1, 224, 224) after permute and interpolate
+        # - world_points: (S, 3, 224, 224) after permute and interpolate
+        # where S is the number of views
+        
+        # Verify the tensor has the expected dimensions
+        if data_tensor.dim() != 4:
+            raise ValueError(f'Expected 4D tensor (S, C, H, W) for {data_type}, got {data_tensor.dim()}D tensor with shape {data_tensor.shape}')
+        
+        # Verify channel dimension
+        expected_channels = 1 if data_type == 'depth' else 3
+        if data_tensor.shape[1] != expected_channels:
+            raise ValueError(f'Expected {data_type} to have {expected_channels} channels, got {data_tensor.shape[1]} channels')
+        
+        # Ensure data matches number of views
+        num_views = len(self.available_views)
+        if data_tensor.shape[0] != num_views:
+            raise ValueError(f'Number of views mismatch: expected {num_views}, got {data_tensor.shape[0]}. '
+                           f'Check that the view order in the saved .npy file matches dataset.available_views')
+        
+        # Verify spatial dimensions are 224x224 (should already be from create_3d_ssl.py)
+        if data_tensor.shape[2] != 224 or data_tensor.shape[3] != 224:
+            logger.warning(f'3D data spatial dimensions are {data_tensor.shape[2]}x{data_tensor.shape[3]}, expected 224x224. Resizing...')
+            # Resize if needed (shouldn't be necessary if create_3d_ssl.py worked correctly)
+            data_tensor = torch.nn.functional.interpolate(
+                data_tensor, size=(224, 224), mode='bilinear', align_corners=False
+            )
+        
+        return data_tensor
 
 @typechecked
 class EncodingDataset(torch.utils.data.Dataset):
