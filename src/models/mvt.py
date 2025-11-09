@@ -204,6 +204,7 @@ class MultiViewTransformer(torch.nn.Module):
         sequence_output = encoder_outputs[0]
         sequence_output = self.vit.layernorm(sequence_output)
         # shape: (batch, length, embedding_dim)
+        # Decoder forward pass
         decoder_outputs = self.decoder(sequence_output, ids_restore)
         # shape: (batch, full length, embedding_dim)
         logits = decoder_outputs.logits

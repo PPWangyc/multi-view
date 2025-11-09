@@ -5,6 +5,7 @@ from utils.utils import (
 import os
 import sys
 import torch
+import pandas as pd
 
 def main(args):
     model_type = args.model_type
@@ -67,18 +68,12 @@ def main(args):
         output_base_dir = os.path.join(base_dir, 'outputs')
     
     save_dir = os.path.join(output_base_dir, file_name)
-    
-    # Add patch mask
-    if 'patch_mask' not in litpose_config:
-        litpose_config['patch_mask'] = {}
-    # if model == 'vits_dino' and model_type == 'heatmap_multiview_transformer':
-    #     final_ratio = 0.5
-    # else:
-    #     final_ratio = 0.0
-    # litpose_config['patch_mask']['init_epoch'] = 40
-    # litpose_config['patch_mask']['final_epoch'] = epochs
-    # litpose_config['patch_mask']['init_ratio'] = 0.0
-    # litpose_config['patch_mask']['final_ratio'] = final_ratio
+
+    # load learning rate from hyper_table.csv
+    hyper_table_path = os.path.join(base_dir, 'configs', 'litpose', 'litpose_hyper.csv')
+    hyper_table = pd.read_csv(hyper_table_path)
+    learning_rate = float(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'learning_rate'].values[0])
+    epochs = int(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'epochs'].values[0])
 
     # Handle special models (-mv, -sv, -mvt, -mvt)
     if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast']):
@@ -90,13 +85,28 @@ def main(args):
             model_path = os.path.join(model_path, 'model.safetensors')
         if not os.path.exists(model_path):
             print(f"Warning: Pretrained model not found: {model_path}", file=sys.stderr)
-        model = f'{model_arch}_imagenet'
+        if model_arch == 'vits':
+            model_version = 'dino'
+        elif model_arch == 'vitb':
+            model_version = 'imagenet'
+        else:
+            raise ValueError(f"Unknown model architecture: {model_arch}")
+        model = f'{model_arch}_{model_version}'
+        final_ratio = 0.0
         # Set the pretrain model path
         if 'model' not in litpose_config:
             litpose_config['model'] = {}
         litpose_config['model']['backbone_checkpoint'] = model_path
         print(f"Pretrained model path: {model_path}", file=sys.stderr)
 
+    # Add patch mask
+    if 'patch_mask' not in litpose_config['training']:
+        litpose_config['training']['patch_mask'] = {}
+    litpose_config['training']['patch_mask']['init_epoch'] = 40
+    litpose_config['training']['patch_mask']['final_epoch'] = epochs
+    litpose_config['training']['patch_mask']['init_ratio'] = 0.0
+    litpose_config['training']['patch_mask']['final_ratio'] = final_ratio
+    
     # Edit config - update data directory
     if data_dir:
         if 'data' not in litpose_config:
@@ -106,8 +116,6 @@ def main(args):
         # litpose_config['data']['camera_params_file'] = os.path.join(data_dir, 'calibrations.csv')
     
     # Update seed
-    if 'training' not in litpose_config:
-        litpose_config['training'] = {}
     litpose_config['training']['rng_seed_data_pt'] = seed
     litpose_config['training']['rng_seed_model_pt'] = seed
     
@@ -125,15 +133,6 @@ def main(args):
         litpose_config['model'] = {}
     litpose_config['model']['backbone'] = model
     litpose_config['model']['model_type'] = model_type
-
-    # Set learning rate based on model type
-    if 'vit' in model:
-        learning_rate = 5e-5
-        if dataset_name == 'fly-anipose':
-            if 'vitb' in model:
-                learning_rate = 2e-4
-    else:
-        learning_rate = 1e-3
     
     # Change train frame
     litpose_config['training']['train_frames'] = train_frame

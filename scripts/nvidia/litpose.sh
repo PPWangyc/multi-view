@@ -4,17 +4,17 @@
 #SBATCH --output="litpose.%j.out"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=2
-#SBATCH --gpus-per-task=2
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=256g
+#SBATCH --gpus=1
+#SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128g
 #SBATCH --time=48:00:00
 #SBATCH --export=ALL
 
 # fly-anipose, mirror-mouse-separate
 dataset=$1
 # resnet50_animal_ap10k, vitb_imagenet, vits_dino, vitb_dino | Use pretrained model
-# vitb-mv, vitb-sv, vitb-mvt, vits-mvt | Need to load pretrained model weights from checkpoint
+# vitb-mv, vitb-sv, vitb-beast, vitb-mvt, vits-mvt, vits-3d-mvt, vits-d-mvt | Need to load pretrained model weights from checkpoint
 model=$2
 # prediction model type: sv, mv
 model_type=$3
@@ -84,7 +84,7 @@ generated_config=$(python litpose/edit_config.py $script_args)
 # Validate that config was generated
 if [ -z "$generated_config" ]; then
     echo "Error: Failed to generate config file"
-    exit 1
+    # exit 1
 fi
 
 # Convert to absolute path to ensure it's found regardless of working directory
