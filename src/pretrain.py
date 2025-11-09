@@ -203,23 +203,41 @@ def main():
     # train
     for epoch in range(start_epoch, epochs):
         model.train()
+        optimizer.zero_grad()  # Zero gradients at start of epoch
         running_loss = 0.
+        accumulation_count = 0  # Track number of batches accumulated since last update
         pbar = tqdm(dataloader, desc=f'Epoch {epoch+1}')
         for batch_idx, batch in enumerate(pbar):
             with accelerator.autocast():
                 # Forward pass
                 results_dict = model(batch)
                 loss = results_dict['loss']
-                running_loss += loss.item()
+                # Track unscaled loss for logging
+                unscaled_loss = loss.item()
+                running_loss += unscaled_loss
+            # Track accumulation
+            accumulation_count += 1
             # Scale loss for gradient accumulation
-            loss = loss / accumulate_grad_batches
+            # For leftover batches at end of epoch, scale by actual accumulation count
+            # Otherwise, scale by accumulate_grad_batches
+            is_last_batch = (batch_idx + 1) == len(dataloader)
+            if is_last_batch and accumulation_count < accumulate_grad_batches:
+                # For leftover batches at end of epoch, scale by actual accumulation count
+                loss = loss / accumulation_count
+            else:
+                # Normal case: scale by accumulate_grad_batches
+                loss = loss / accumulate_grad_batches
             loss.backward()
             
-            # Update weights every accumulate_grad_batches steps
-            if (batch_idx + 1) % accumulate_grad_batches == 0:
+            # Update weights every accumulate_grad_batches steps or at end of epoch
+            should_update = accumulation_count == accumulate_grad_batches
+            
+            if should_update or is_last_batch:
                 optimizer.step()
                 optimizer.zero_grad()
-                scheduler.step()
+                accumulation_count = 0  # Reset accumulation counter
+                if should_update:  # Only step scheduler on regular updates, not on leftover batches
+                    scheduler.step()
                 # -- update target encoder for ijepa (DDP/Accelerate-safe) ---
                 if 'ijepa' in config['model']['name'].lower():
                     if hasattr(model, 'update_target'):
@@ -227,8 +245,8 @@ def main():
                     elif hasattr(model, 'module') and hasattr(model.module, 'update_target'):
                         model.module.update_target()
             
-            # Update progress bar with current loss
-            pbar.set_postfix({'loss': f'{loss.item() * accumulate_grad_batches:.4f}'})
+            # Update progress bar with unscaled loss
+            pbar.set_postfix({'loss': f'{unscaled_loss:.4f}'})
         
         avg_loss = running_loss/len(dataloader)
         logger.info(f'Epoch {epoch+1} loss: {avg_loss}')
