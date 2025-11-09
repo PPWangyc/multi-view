@@ -1,11 +1,13 @@
 """Visualization utilities for masks and bounding boxes."""
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import torch
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -440,4 +442,238 @@ def create_visualization_video(
     
     # Create video
     create_video_from_frames(visualized_frames, output_path, fps=fps)
+
+
+def plot_mvt_reconstructions(
+    reconstructions: Union[np.ndarray, torch.Tensor],
+    mask: Union[np.ndarray, torch.Tensor],
+    output_image: Union[np.ndarray, torch.Tensor],
+    output_mod: List[str],
+    avail_views: Optional[List[str]] = None,
+    patch_size: int = 16,
+    imagenet_mean: Optional[np.ndarray] = None,
+    imagenet_std: Optional[np.ndarray] = None,
+    mask_color: float = 0.5,
+    figsize: Optional[Tuple[int, int]] = None,
+    show_stats: bool = True,
+    return_fig: bool = False
+) -> Optional[plt.Figure]:
+    """Plot MVT reconstructions with ground truth visualization based on output_mod.
+    
+    Creates visualizations based on output_mod:
+    - If output_mod = ['rgb']: 3 rows (RGB GT, RGB Masked GT, RGB reconstruction)
+    - If output_mod = ['rgb', 'depth']: 6 rows (RGB GT, RGB Masked GT, RGB recon, Depth GT, Depth Masked GT, Depth recon)
+    - Ignores 'world_points' in output_mod
+    
+    Args:
+        reconstructions: Reconstructed images, shape (num_views, channels, height, width)
+                        Can be numpy array or torch tensor
+        mask: Binary mask indicating which patches are masked, shape (num_views * num_patches,)
+              where 1 = masked, 0 = visible. Can be numpy array or torch tensor
+        output_image: Ground truth output images, shape (num_views, channels, height, width)
+                     Can be numpy array or torch tensor
+        output_mod: List of output modes, e.g., ['rgb'] or ['rgb', 'depth']
+        avail_views: Optional list of view names for titles (e.g., ['view0', 'view1', ...])
+        patch_size: Size of each patch (default: 16)
+        imagenet_mean: ImageNet mean for denormalization (default: [0.485, 0.456, 0.406])
+        imagenet_std: ImageNet std for denormalization (default: [0.229, 0.224, 0.225])
+        mask_color: Gray value for masked patches (0.0 to 1.0, default: 0.5)
+        figsize: Optional figure size tuple (width, height). If None, auto-calculated
+        show_stats: Whether to print mask statistics (default: True)
+        return_fig: Whether to return the figure object (default: False)
+    
+    Returns:
+        matplotlib Figure object if return_fig=True, else None
+    """
+    # Filter out 'world_points' from output_mod
+    output_mod_filtered = [mode for mode in output_mod if mode != 'world_points']
+    
+    # Default ImageNet normalization parameters
+    if imagenet_mean is None:
+        imagenet_mean = np.array([0.485, 0.456, 0.406])
+    if imagenet_std is None:
+        imagenet_std = np.array([0.229, 0.224, 0.225])
+    
+    # Convert torch tensors to numpy
+    if isinstance(reconstructions, torch.Tensor):
+        reconstructions = reconstructions.detach().cpu().numpy()
+    if isinstance(mask, torch.Tensor):
+        mask = mask.detach().cpu().numpy()
+    if isinstance(output_image, torch.Tensor):
+        output_image = output_image.detach().cpu().numpy()
+    
+    # Get dimensions
+    num_views, total_channels, height, width = reconstructions.shape
+    
+    # Parse channel indices based on output_mod
+    channel_indices = {}
+    current_channel = 0
+    for mode in output_mod:
+        if mode == 'rgb':
+            channel_indices['rgb'] = (current_channel, current_channel + 3)
+            current_channel += 3
+        elif mode == 'depth':
+            channel_indices['depth'] = (current_channel, current_channel + 1)
+            current_channel += 1
+        elif mode == 'world_points':
+            # Skip world_points - don't add to channel_indices
+            current_channel += 3
+    
+    # Calculate number of patches per view
+    num_patches_h = height // patch_size
+    num_patches_w = width // patch_size
+    num_patches_per_view = num_patches_h * num_patches_w
+    
+    # Reshape mask from (num_views * num_patches,) to (num_views, num_patches_per_view)
+    mask_reshaped = mask.reshape(num_views, num_patches_per_view)
+    
+    # Reshape mask to patch grid for each view: (num_views, num_patches_h, num_patches_w)
+    mask_patch_grid = mask_reshaped.reshape(num_views, num_patches_h, num_patches_w)
+    
+    # Expand mask to pixel level by repeating each patch
+    mask_pixel = np.repeat(np.repeat(mask_patch_grid, patch_size, axis=1), patch_size, axis=2)
+    
+    # Denormalize output_image (only RGB channels use ImageNet normalization)
+    denormalized_output = np.zeros_like(output_image)
+    for v in range(num_views):
+        for c in range(total_channels):
+            if 'rgb' in channel_indices and channel_indices['rgb'][0] <= c < channel_indices['rgb'][1]:
+                # RGB channels: use ImageNet normalization
+                rgb_idx = c - channel_indices['rgb'][0]
+                denormalized_output[v, c] = output_image[v, c] * imagenet_std[rgb_idx] + imagenet_mean[rgb_idx]
+            else:
+                # Depth or other channels: just clip to [0, 1] (assuming already normalized)
+                denormalized_output[v, c] = np.clip(output_image[v, c], 0, 1)
+    denormalized_output = np.clip(denormalized_output, 0, 1)
+    
+    # Denormalize reconstructions
+    denormalized_recon = np.zeros_like(reconstructions)
+    for v in range(num_views):
+        for c in range(total_channels):
+            if 'rgb' in channel_indices and channel_indices['rgb'][0] <= c < channel_indices['rgb'][1]:
+                # RGB channels: use ImageNet normalization
+                rgb_idx = c - channel_indices['rgb'][0]
+                denormalized_recon[v, c] = reconstructions[v, c] * imagenet_std[rgb_idx] + imagenet_mean[rgb_idx]
+            else:
+                # Depth or other channels: just clip to [0, 1]
+                denormalized_recon[v, c] = np.clip(reconstructions[v, c], 0, 1)
+    denormalized_recon = np.clip(denormalized_recon, 0, 1)
+    
+    # Set default view names if not provided
+    if avail_views is None:
+        avail_views = [f'View {i+1}' for i in range(num_views)]
+    
+    # Determine number of rows based on output_mod_filtered
+    num_rows = 0
+    if 'rgb' in output_mod_filtered:
+        num_rows += 3  # RGB GT, RGB Masked GT, and RGB recon
+    if 'depth' in output_mod_filtered:
+        num_rows += 3  # Depth GT, Depth Masked GT, and Depth recon
+    
+    # Calculate figure size if not provided
+    if figsize is None:
+        figsize = (3 * num_views, 3 * num_rows)
+    
+    # Create plot
+    fig, axes = plt.subplots(num_rows, num_views, figsize=figsize)
+    if num_views == 1:
+        axes = axes.reshape(num_rows, 1)
+    elif num_rows == 1:
+        axes = axes.reshape(1, num_views)
+    
+    row_idx = 0
+    
+    # Plot RGB if present
+    if 'rgb' in output_mod_filtered:
+        rgb_start, rgb_end = channel_indices['rgb']
+        
+        # Extract RGB channels
+        output_rgb = denormalized_output[:, rgb_start:rgb_end, :, :]  # (num_views, 3, H, W)
+        recon_rgb = denormalized_recon[:, rgb_start:rgb_end, :, :]  # (num_views, 3, H, W)
+        
+        # Create masked RGB ground truth
+        masked_rgb_gt = output_rgb.copy()
+        for v in range(num_views):
+            for c in range(3):
+                masked_rgb_gt[v, c] = np.where(mask_pixel[v] == 1, mask_color, output_rgb[v, c])
+        
+        # Rearrange for plotting: (num_views, C, H, W) -> (num_views, H, W, C)
+        output_rgb_plot = output_rgb.transpose(0, 2, 3, 1)
+        recon_rgb_plot = recon_rgb.transpose(0, 2, 3, 1)
+        masked_rgb_gt_plot = masked_rgb_gt.transpose(0, 2, 3, 1)
+        
+        # Row 1: RGB Ground Truth
+        for i in range(num_views):
+            axes[row_idx, i].imshow(output_rgb_plot[i])
+            axes[row_idx, i].set_title(f'RGB GT: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+        
+        # Row 2: RGB Masked Ground Truth
+        for i in range(num_views):
+            axes[row_idx, i].imshow(masked_rgb_gt_plot[i])
+            axes[row_idx, i].set_title(f'RGB Masked GT: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+        
+        # Row 3: RGB Reconstruction
+        for i in range(num_views):
+            axes[row_idx, i].imshow(recon_rgb_plot[i])
+            axes[row_idx, i].set_title(f'RGB Recon: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+    
+    # Plot Depth if present
+    if 'depth' in output_mod_filtered:
+        depth_start, depth_end = channel_indices['depth']
+        
+        # Extract depth channel
+        output_depth = denormalized_output[:, depth_start:depth_end, :, :]  # (num_views, 1, H, W)
+        recon_depth = denormalized_recon[:, depth_start:depth_end, :, :]  # (num_views, 1, H, W)
+        
+        # Create masked depth ground truth
+        masked_depth_gt = output_depth.copy()
+        for v in range(num_views):
+            masked_depth_gt[v, 0] = np.where(mask_pixel[v] == 1, mask_color, output_depth[v, 0])
+        
+        # Rearrange for plotting: (num_views, 1, H, W) -> (num_views, H, W, 1)
+        output_depth_plot = output_depth.transpose(0, 2, 3, 1)
+        recon_depth_plot = recon_depth.transpose(0, 2, 3, 1)
+        masked_depth_gt_plot = masked_depth_gt.transpose(0, 2, 3, 1)
+        
+        # Row 4: Depth Ground Truth
+        for i in range(num_views):
+            axes[row_idx, i].imshow(output_depth_plot[i].squeeze(), cmap='inferno')
+            axes[row_idx, i].set_title(f'Depth GT: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+        
+        # Row 5: Depth Masked Ground Truth
+        for i in range(num_views):
+            axes[row_idx, i].imshow(masked_depth_gt_plot[i].squeeze(), cmap='inferno')
+            axes[row_idx, i].set_title(f'Depth Masked GT: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+        
+        # Row 6: Depth Reconstruction
+        for i in range(num_views):
+            axes[row_idx, i].imshow(recon_depth_plot[i].squeeze(), cmap='inferno')
+            axes[row_idx, i].set_title(f'Depth Recon: {avail_views[i]}', fontsize=10)
+            axes[row_idx, i].axis('off')
+        row_idx += 1
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print mask statistics if requested
+    if show_stats:
+        mask_ratio_per_view = mask_reshaped.mean(axis=1)
+        print(f"\nMask statistics:")
+        print(f"  Total patches per view: {num_patches_per_view}")
+        print(f"  Mask ratio per view: {mask_ratio_per_view}")
+        print(f"  Average mask ratio: {mask.mean():.3f} ({(mask.mean() * 100):.1f}% of patches masked)")
+    
+    if return_fig:
+        return fig
+    return None
 

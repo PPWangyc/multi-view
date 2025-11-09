@@ -64,7 +64,7 @@ class MultiViewTransformer(torch.nn.Module):
     def unpatchify(self, patchified_pixel_values, original_image_size: Optional[tuple[int, int]] = None):
         """
         Args:
-            patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_views, num_patches, patch_size**2 * num_channels)`:
+            patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
             original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
@@ -80,19 +80,18 @@ class MultiViewTransformer(torch.nn.Module):
             else (self.config.image_size, self.config.image_size)
         )
         original_height, original_width = original_image_size
-        num_views = patchified_pixel_values.shape[1]
         num_patches_h = original_height // patch_size
         num_patches_w = original_width // patch_size
         # sanity check
-        if num_patches_h * num_patches_w != patchified_pixel_values.shape[1]:
+        if num_patches_h * num_patches_w * self.num_views != patchified_pixel_values.shape[1]:
             raise ValueError(
-                f"The number of patches in the patchified pixel values {patchified_pixel_values.shape[1]}, does not match the number of patches on original image {num_patches_h}*{num_patches_w}"
+                f"The number of patches in the patchified pixel values {patchified_pixel_values.shape[1]}, does not match the number of patches on original image {num_patches_h}*{num_patches_w}*{self.num_views}"
             )
 
         # unpatchify
         batch_size = patchified_pixel_values.shape[0]
         patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size * num_views,
+            batch_size * self.num_views,
             num_patches_h,
             num_patches_w,
             patch_size,
@@ -102,7 +101,7 @@ class MultiViewTransformer(torch.nn.Module):
         patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
         pixel_values = patchified_pixel_values.reshape(
             batch_size,
-            num_views,
+            self.num_views,
             num_channels,
             num_patches_h * patch_size,
             num_patches_w * patch_size,
@@ -168,6 +167,7 @@ class MultiViewTransformer(torch.nn.Module):
     def forward(
         self,
         x: dict,
+        return_recon: bool = False,
     ) -> Dict[str, torch.Tensor]:
         pixel_values = x['output_image']
         x = x['input_image']
@@ -215,14 +215,49 @@ class MultiViewTransformer(torch.nn.Module):
         return_dict = {
             'logits': logits,
             'loss': loss,
+            'mask': mask,
+            'ids_restore': ids_restore,
+            'reconstructions': self.unpatchify(logits) if return_recon else None,
         }
         return return_dict
 
-    def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
-        results_dict = self.forward(batch_dict)
-        if return_images:
-            results_dict['images'] = batch_dict['image']
-        return results_dict
+    def get_model_outputs(self, batch_dict: dict, return_recon: bool = False) -> dict:
+        x = batch_dict['input_image']
+        
+        B, V, C, H, W = x.shape
+        # shape: (batch * view, channels, img_height, img_width)
+        x = x.reshape(B * V, C, H, W)
+        
+        # create patch embeddings and add position embeddings; remove CLS token
+        embedding_output = self.vit.embeddings(
+            x, bool_masked_pos=None, interpolate_pos_encoding=False
+        )[:, 1:]
+        # shape: (batch * view, num_patches, embedding_dim)
+
+        # reshape embedding_output to (batch, view * num_patches, embedding_dim)
+        embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)
+
+        # push data through vit encoder
+        encoder_outputs = self.vit.encoder(
+            embedding_output,
+            head_mask=None,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=None,
+        )
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.vit.layernorm(sequence_output)
+
+        if not return_recon:
+            return {'latents': sequence_output}
+        else:
+            # no masking
+            mask = torch.zeros_like(embedding_output)[..., 0]
+            ids_restore = torch.arange(embedding_output.shape[1]).unsqueeze(0).repeat(B, 1).to(embedding_output.device)
+            decoder_outputs = self.decoder(sequence_output, ids_restore)
+            logits = decoder_outputs.logits
+            reconstructions = self.unpatchify(logits)
+            return {'logits': logits, 'reconstructions': reconstructions, 'mask': mask}
 
     def compute_loss(
         self,
@@ -234,13 +269,9 @@ class MultiViewTransformer(torch.nn.Module):
         loss = mse_loss
         return loss
 
-    def predict_step(self, batch_dict: dict) -> dict:
-        # set mask_ratio to 0 for inference
-        self.config.mask_ratio = 0
+    def predict_step(self, batch_dict: dict, return_recon: bool = False) -> dict:
         # get model outputs
-        results_dict = self.get_model_outputs(batch_dict, return_images=False)
-        # reset mask_ratio to the original value
-        self.vit_mae.config.mask_ratio = self.mask_ratio
+        results_dict = self.get_model_outputs(batch_dict, return_recon=return_recon)
         return results_dict
 
 class MultiViewTransformerDecoder(ViTMAEDecoder):
