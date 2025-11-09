@@ -12,9 +12,9 @@ def main(args):
     # get available gpus
     num_gpus = torch.cuda.device_count()
     # make sure available gpus num is divisible by 2, if gpus > 1
-    if num_gpus > 1 and num_gpus % 2 != 0:
-        print(f"Warning: Available GPUs number is not divisible by 2, using {num_gpus - 1} GPUs", file=sys.stderr)
-        num_gpus = num_gpus - 1
+    # if num_gpus > 1 and num_gpus % 2 != 0:
+    #     print(f"Warning: Available GPUs number is not divisible by 2, using {num_gpus - 1} GPUs", file=sys.stderr)
+        # num_gpus = num_gpus - 1
 
     # num_gpus = max(available_gpus, 4)
     # Validate required arguments

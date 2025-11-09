@@ -26,7 +26,7 @@ class MultiViewTransformer(torch.nn.Module):
         h = w = config['model']['model_params']['image_size'] // config['model']['model_params']['patch_size']
         self.num_patches = h * w
         self.hidden_size = config['model']['model_params']['hidden_size']
-        self.view_embeddings = torch.nn.Parameter(torch.randn(1, self.num_views, self.num_patches, self.hidden_size))
+        # self.view_embeddings = torch.nn.Parameter(torch.randn(1, self.num_views, self.num_patches, self.hidden_size))
 
         self.decoder = MultiViewTransformerDecoder(self.config, self.num_patches, self.num_views)
 
@@ -183,9 +183,10 @@ class MultiViewTransformer(torch.nn.Module):
         )[:, 1:]
         # shape: (batch * view, num_patches, embedding_dim)
         
-        # Add view embeddings to the sequence
-        embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
-        embedding_output += self.view_embeddings
+        # # Add view embeddings to the sequence
+        # @Yanchne: I removed view embeddings because it gives more augmentations.
+        # embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
+        # embedding_output += self.view_embeddings
 
         # reshape embedding_output to (batch, view * num_patches, embedding_dim)
         embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)

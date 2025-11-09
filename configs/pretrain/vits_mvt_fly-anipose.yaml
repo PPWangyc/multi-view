@@ -53,7 +53,7 @@ training:
 
   effective_batch_size: 1024 # if null, use the default value from the optimizer
 
-  use_wandb: false
+  use_wandb: true
   use_bfloat16: true
 
 # optimizer configuration
