@@ -10,4 +10,5 @@ fly-anipose,vitb-mv,heatmap_multiview_transformer,0.0001,300
 fly-anipose,resnet50_animal_ap10k,heatmap_multiview_transformer,0.001,300
 crim13,vitb_imagenet,heatmap,0.00005,300
 crim13,vitb-beast,heatmap,0.00005,300
+crim13,vitb_dinov2,heatmap,0.00005,300
 crim13,resnet50_animal_ap10k,heatmap,0.001,300

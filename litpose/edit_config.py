@@ -87,13 +87,17 @@ def main(args):
         else:
             raise ValueError(f"Unknown model architecture: {model_arch}")
         model = f'{model_arch}_{model_version}'
-        final_ratio = 0.0
         # Set the pretrain model path
         if 'model' not in litpose_config:
             litpose_config['model'] = {}
         litpose_config['model']['backbone_checkpoint'] = model_path
         print(f"Pretrained model path: {model_path}", file=sys.stderr)
-
+    if model_type == 'heatmap':
+        final_ratio = 0.0
+    elif model_type == 'heatmap_multiview_transformer':
+        final_ratio = 0.5
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
     # Add patch mask
     if 'patch_mask' not in litpose_config['training']:
         litpose_config['training']['patch_mask'] = {}
