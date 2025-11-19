@@ -316,7 +316,7 @@ class MultiViewTransformer(torch.nn.Module):
         # shape: (batch * view, num_patches, embedding_dim)
         
         # # Add view embeddings to the sequence
-        # @Yanchne: I removed view embeddings because it gives more augmentations.
+        # # @Yanchne: I removed view embeddings because it gives more augmentations.
         # embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
         # embedding_output += self.view_embeddings
 
@@ -423,9 +423,9 @@ class MultiViewTransformerDecoder(ViTMAEDecoder):
         #     ).float().unsqueeze(0)
         # self.decoder_pos_embed = nn.Parameter(torch.cat([decoder_pos_embed_dict[i] for i in range(num_views)], dim=1), requires_grad=False)
         
-        # # learnable view embeddings
-        # self.decoder_view_embed = torch.nn.Parameter(
-        #     torch.randn(1, num_views*num_patches, config.decoder_hidden_size), requires_grad=True)
+        # learnable view embeddings
+        self.decoder_view_embed = torch.nn.Parameter(
+            torch.randn(1, num_views*num_patches, config.decoder_hidden_size), requires_grad=True)
 
     def forward(self, hidden_states, ids_restore):
         # embed tokens
@@ -438,13 +438,12 @@ class MultiViewTransformerDecoder(ViTMAEDecoder):
         # unshuffle
         x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]).to(x_.device))
         # add pos embed
-        x = x.reshape(B, self.config.num_views, -1, D)
+        x = x.reshape(B * self.config.num_views, -1, D)
         hidden_states = x + self.decoder_pos_embed[:,1:] # skip cls token
         hidden_states = hidden_states.reshape(B, -1, D)
         
         # # add view embeddings
-        # decoder_view_embed_ = self.decoder_view_embed
-        # hidden_states = hidden_states + decoder_view_embed_
+        hidden_states += self.decoder_view_embed
 
         # apply Transformer layers (blocks)
         for i, layer_module in enumerate(self.decoder_layers):
