@@ -10,6 +10,7 @@
 #SBATCH --mem=128g
 #SBATCH --time=48:00:00
 #SBATCH --export=ALL
+#SBATCH --priority=999999
 
 # fly-anipose, mirror-mouse-separate
 dataset=$1
