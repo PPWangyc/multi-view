@@ -15,7 +15,7 @@
 # dataset: mirror-mouse, mirror-fish, ibl-paw, crim13
 dataset=$1
 # train_frames: 75, 100, 800 (dataset dependent)
-train_frames=$2
+train_frames=100
 # gpu_id: 0, 1, 2, etc. (optional, defaults to 0)
 gpu_id=${3:-0}
 

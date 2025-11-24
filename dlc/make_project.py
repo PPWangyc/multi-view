@@ -42,6 +42,10 @@ def get_dataset_info(dataset_name):
     global VIDEO_DIR
     global LABELED_CSV_FILE
     global LABELED_DATA_DIR
+    global LITPOSE_DIR
+    LITPOSE_DIR = os.path.join(WORKSPACE_ROOT, 'outputs-beast')
+    global LITPOSE_MODEL
+    LITPOSE_MODEL = 'resnet50_animal_ap10k'
     if dataset_name == 'ibl-paw':
         TRAIN_BATCH_SIZE = 16
         LEARNING_RATE = 1e-3
@@ -109,7 +113,6 @@ def setup_dlc_project():
     
     return dlc_config_path, dlc_dir
 
-
 def update_bodyparts(dlc_config_path):
     """Update DLC config with bodypart names from litpose data."""
     print("Updating bodypart names...")
@@ -128,7 +131,6 @@ def update_bodyparts(dlc_config_path):
     yaml.dump(dlc_config, open(dlc_config_path, 'w'))
     
     return keypoint_names, ptl_labels
-
 
 def copy_labeled_data(dlc_dir, ptl_labels, dlc_config_path):
     """Copy labeled data from litpose format to DLC format."""
@@ -176,8 +178,7 @@ def copy_labeled_data(dlc_dir, ptl_labels, dlc_config_path):
             print(f"Removed unused video {video_dir} from {labeled_data_dir}")
     return dlc_config_path
 
-
-def create_train_test_splits(ptl_labels, train_frames, rng_seeds, dlc_config_path, train_prob=0.95):
+def create_train_test_random_splits(ptl_labels, train_frames, rng_seeds, dlc_config_path, train_prob=0.95):
     """Create train/test splits for specified number of frames."""
     print(f"Creating train/test splits for {train_frames} frames...")
     
@@ -191,11 +192,6 @@ def create_train_test_splits(ptl_labels, train_frames, rng_seeds, dlc_config_pat
     # select the indices of the labeled data
     all_indices = ptl_labels.index[ind_mask].tolist()
     all_indices = np.arange(len(ptl_labels))[ind_mask]
-    # all_indices_tuples = []
-    # for index in all_indices:
-    #     tuple_index = tuple(index.split('/'))
-    #     all_indices_tuples.append(tuple_index)
-    # all_indices = all_indices_tuples
     shuffle_names = []
     idxs_train = []
     idxs_test = []
@@ -230,6 +226,34 @@ def create_train_test_splits(ptl_labels, train_frames, rng_seeds, dlc_config_pat
     yaml.dump(config, open(dlc_config_path, 'w'))
     return shuffle_names, idxs_train, idxs_test
 
+def create_train_test_litpose_splits(ptl_labels, train_frames, rng_seeds, dlc_config_path, train_prob=0.95):
+    """Create train/test splits for specified number of frames."""
+    print(f"Creating train/test splits for {train_frames} frames...")
+    
+    litpose_csv_paths = [f'{LITPOSE_DIR}/ds-{DATASET_NAME}_mode-ft_model-{LITPOSE_MODEL}_frame-{train_frames}_epoch-300_seed-{rng_seed}/predictions.csv' for rng_seed in rng_seeds]
+    print(f"Found {len(litpose_csv_paths)} litpose CSV files: {litpose_csv_paths}")
+    shuffle_names = []
+    idxs_train = []
+    idxs_valid = []
+    
+    for rng_seed in rng_seeds:
+        # load collected data
+        df = pd.read_csv(
+            litpose_csv_paths[rng_seed],
+            header=[0, 1, 2], index_col=0)
+        split_set = df.set.sort_index()
+        train_indices = list(np.where(split_set.to_numpy()=='train')[0])
+        valid_indices = list(np.where(split_set.to_numpy()=='validation')[0])
+        assert len(train_indices) == train_frames, f"Train indices length mismatch: {len(train_indices)} != {train_frames}"
+        n_valid = min(len(valid_indices), train_frames)
+        valid_indices = valid_indices[:n_valid]
+        idxs_train.append(train_indices)
+        idxs_valid.append(valid_indices)
+        shuffle_names.append(int(str(train_frames) + str(rng_seed)))
+    config = yaml.safe_load(open(dlc_config_path))
+    config['TrainingFraction'] = [1-int(len(valid_indices) / (len(valid_indices) + len(train_indices)) * 100) / 100] * len(rng_seeds)
+    yaml.dump(config, open(dlc_config_path, 'w'))
+    return shuffle_names, idxs_train, idxs_valid
 
 def create_training_datasets(dlc_config_path, shuffle_names, idxs_train, idxs_test):
     """Create DLC training datasets with specified splits."""
@@ -241,7 +265,6 @@ def create_training_datasets(dlc_config_path, shuffle_names, idxs_train, idxs_te
         trainIndices=idxs_train,
         testIndices=idxs_test,
     )
-
 
 def main(args):
     """Main function to set up DLC project."""
@@ -264,7 +287,7 @@ def main(args):
     dlc_config_path = copy_labeled_data(dlc_dir, ptl_labels, dlc_config_path)
     
     # Step 4: Create train/test splits (use DLC-formatted labels)
-    shuffle_names, idxs_train, idxs_test = create_train_test_splits(
+    shuffle_names, idxs_train, idxs_test = create_train_test_litpose_splits(
         ptl_labels, args.train_frames, RNG_SEEDS, dlc_config_path, train_prob=TRAIN_PROB
     )
     

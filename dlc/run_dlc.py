@@ -136,13 +136,13 @@ def run_main(args):
     batch_size = 8
     epochs = 300
     if args.dataset == 'crim13':
-        learning_rate = 0.0001
+        learning_rate = 0.001
     elif args.dataset == 'ibl-paw':
         learning_rate = 0.0001
     elif args.dataset == 'mirror-mouse':
         learning_rate = 0.0001
     elif args.dataset == 'mirror-fish':
-        learning_rate = 0.0001
+        learning_rate = 0.0005
     else:
         raise ValueError(f"Dataset {args.dataset} not supported.")
     gamma = 0.5
@@ -231,21 +231,32 @@ def run_main(args):
         yaml.dump(test_config, open(test_config_file, 'w'))
 
         # train model
-        deeplabcut.train_network(
-            config_path,
-            shuffle=shuffle,
-            trainingsetindex=trainingsetindex,
-            gputouse=args.gpu_id,
-            max_snapshots_to_keep=1,
-            autotune=False,
-            displayiters=displayiters,
-            saveiters=saveiters,
-            maxiters=maxiters,
-            allow_growth=True,
-        )
+        if not args.skip_train:
+            deeplabcut.train_network(
+                config_path,
+                shuffle=shuffle,
+                trainingsetindex=trainingsetindex,
+                gputouse=args.gpu_id,
+                max_snapshots_to_keep=1,
+                autotune=False,
+                displayiters=displayiters,
+                saveiters=saveiters,
+                maxiters=maxiters,
+                allow_growth=True,
+            )
         
         # Run inference on OOD labeled data from CollectedData_new.csv
-        ood_csv_file = os.path.join(ptl_dir, args.dataset, 'CollectedData_new.csv')
+        if args.dataset == 'crim13':
+            ood_csv_name = 'labels_new.csv'
+        elif args.dataset == 'mirror-mouse':
+            ood_csv_name = 'CollectedData_new.csv'
+        elif args.dataset == 'mirror-fish':
+            ood_csv_name = 'CollectedData_new.csv'
+        elif args.dataset == 'ibl-paw':
+            ood_csv_name = 'CollectedData_new.csv'
+        else:
+            raise ValueError(f"Dataset {args.dataset} not supported.")
+        ood_csv_file = os.path.join(ptl_dir, args.dataset, ood_csv_name)
         print(f"Running inference on OOD labeled data: {ood_csv_file}")
         # Read the OOD CSV to get image paths
         df_ood = pd.read_csv(ood_csv_file, header=[0, 1, 2], index_col=0)
@@ -274,15 +285,13 @@ def run_main(args):
         
         # Run inference using analyze_images
         # Note: analyze_images uses 'device' parameter, not 'gputouse'
-        # For GPU: device='cuda:0', for CPU: device='cpu'
-        device = f'cuda:{args.gpu_id}' if args.gpu_id is not None else 'cuda:0'
         
         dlc_inference = deeplabcut.analyze_images(
             config_path,
             full_image_paths,
             shuffle=shuffle,
             trainingsetindex=trainingsetindex,
-            device=device,
+            device='cuda',
             save_as_csv=True,
         )
         
@@ -860,12 +869,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # base params
-    parser.add_argument('--dataset', type=str, required=True,
-                       help='Dataset name (e.g., mirror-mouse)')
+    parser.add_argument('--dataset', type=str, default='mirror-mouse',
+                       help='Dataset name (default: mirror-mouse)')
     parser.add_argument('--gpu_id', default=0, type=int,
-                       help='GPU ID to use for training')
-    parser.add_argument('--train_frames', type=int, required=True,
-                       help='Number of training frames (e.g., 75, 100)')
+                       help='GPU ID to use for training (default: 0)')
+    parser.add_argument('--train_frames', type=int, default=100,
+                       help='Number of training frames (default: 100)')
+    parser.add_argument('--skip_train', action='store_true',
+                       help='Skip training and only run inference on OOD data (default: False)')
 
     namespace, _ = parser.parse_known_args()
     run_main(namespace)
