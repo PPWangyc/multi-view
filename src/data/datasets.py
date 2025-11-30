@@ -96,6 +96,173 @@ class BaseDataset(torch.utils.data.Dataset):
         )
 
 @typechecked
+class VideoDataset(torch.utils.data.Dataset):
+    """Video dataset that contains video clips around anchor frames."""
+
+    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None, config: dict = None) -> None:
+        """Initialize a video dataset.
+
+        Parameters
+        ----------
+        data_dir: absolute path to data directory
+        imgaug_pipeline: imgaug transform pipeline to apply to images
+
+        """
+        self.data_dir = Path(data_dir)
+        if not self.data_dir.is_dir():
+            raise ValueError(f'{self.data_dir} is not a directory')
+
+        self.imgaug_pipeline = imgaug_pipeline
+        # read all csv files in data_dir
+        self.csv_files = sorted(list(self.data_dir.rglob('selected_frames.csv')))
+        if len(self.csv_files) == 0:
+            raise ValueError(f'{self.data_dir} does not contain selected_frames.csv files')
+
+        # collect anchor frames from all csv files
+        all_anchor_frames = []
+        for csv_file in self.csv_files:
+            video_id = csv_file.parts[-2]
+            df = pd.read_csv(csv_file, header=None)
+            # df only has one column, and every row is a frame id
+            frame_ids = df.iloc[:, 0].tolist()
+            for frame_id in frame_ids:
+                all_anchor_frames.append((video_id, frame_id))
+
+        if len(all_anchor_frames) == 0:
+            raise ValueError(f'{self.data_dir} does not contain any anchor frames')
+
+        # Filter anchor frames to only keep those where all 16 frames in the clip exist
+        self.anchor_frames = []
+        for video_id, anchor_frame_id in all_anchor_frames:
+            if self._check_all_frames_exist(video_id, anchor_frame_id):
+                self.anchor_frames.append((video_id, anchor_frame_id))
+
+        if len(self.anchor_frames) == 0:
+            raise ValueError(f'{self.data_dir} does not contain any valid anchor frames with all required frames')
+
+        total_clips = len(self.anchor_frames)
+        filtered_out = len(all_anchor_frames) - total_clips
+        logger.info(f'VideoDataset Summary:')
+        logger.info(f'  • Total anchor frames found: {len(all_anchor_frames)}')
+        logger.info(f'  • Valid anchor frames (all frames exist): {total_clips}')
+        logger.info(f'  • Filtered out (missing frames): {filtered_out}')
+        logger.info(f'  • Clips per anchor: 16 frames (from ±8 frames around anchor)')
+
+        # send image to tensor, resize to canonical dimensions, and normalize
+        pytorch_transform_list = [
+            transforms.ToTensor(),
+            transforms.Resize((224, 224)),
+            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        ]
+        self.pytorch_transform = transforms.Compose(pytorch_transform_list)
+
+    def _check_all_frames_exist(self, video_id: str, anchor_frame_id: str) -> bool:
+        """Check if all 16 frames in the clip exist for a given anchor frame.
+        
+        Parameters
+        ----------
+        video_id: str
+            Video identifier
+        anchor_frame_id: str
+            Anchor frame ID (e.g., "img00005469.png")
+        
+        Returns
+        -------
+        bool
+            True if all 16 frames exist, False otherwise
+        """
+        # Extract frame number from anchor frame ID
+        frame_number_str = anchor_frame_id.replace('img', '').replace('.png', '')
+        anchor_frame_num = int(frame_number_str)
+
+        # Get ±8 frames around anchor (17 frames total, then take first 16)
+        for offset in range(-8, 8):  # -8 to +7 inclusive (16 frames)
+            frame_num = anchor_frame_num + offset
+            # Format frame number as 8-digit zero-padded string
+            frame_id = f'img{frame_num:08d}.png'
+            frame_path = self.data_dir / video_id / frame_id
+            
+            if not frame_path.exists():
+                return False
+        
+        return True
+
+    def __len__(self) -> int:
+        return len(self.anchor_frames)
+
+    def __getitem__(self, idx: int | list) -> ExampleDict | list[ExampleDict]:
+        """Get item(s) from dataset.
+
+        Parameters
+        ----------
+        idx: single index or list of indices
+
+        Returns
+        -------
+        Single ExampleDict or list of ExampleDict objects
+        The image field contains a tensor of shape (16, 3, 224, 224)
+
+        """
+        # Handle batch of indices
+        if isinstance(idx, list):
+            return [self._get_single_item(i) for i in idx]
+        else:
+            # Handle single index
+            return self._get_single_item(idx)
+
+    def _get_single_item(self, idx: int) -> ExampleDict:
+        """Get a single item from the dataset."""
+        video_id, anchor_frame_id = self.anchor_frames[idx]
+
+        # Extract frame number from anchor frame ID (e.g., "img00005469.png" -> 5469)
+        # Frame ID format: "img{frame_number:08d}.png"
+        frame_number_str = anchor_frame_id.replace('img', '').replace('.png', '')
+        anchor_frame_num = int(frame_number_str)
+
+        # Get ±8 frames around anchor (17 frames total, then take first 16)
+        clip_frame_nums = []
+        for offset in range(-8, 9):  # -8 to +8 inclusive (17 frames)
+            frame_num = anchor_frame_num + offset
+            # Format frame number as 8-digit zero-padded string
+            frame_id = f'img{frame_num:08d}.png'
+            clip_frame_nums.append((frame_num, frame_id))
+
+        # Load images for the clip (first 16 frames)
+        # All frames should exist since we filtered during initialization
+        clip_images = []
+        clip_image_paths = []
+        for frame_num, frame_id in clip_frame_nums[:16]:  # Take first 16 frames
+            frame_path = self.data_dir / video_id / frame_id
+
+            # All frames should exist, but check anyway for safety
+            if not frame_path.exists():
+                raise FileNotFoundError(f'Frame not found: {frame_path}. This should not happen after filtering.')
+
+            # Read image and apply transformations
+            image = Image.open(frame_path).convert('RGB')
+            if self.imgaug_pipeline is not None:
+                # expands add batch dim for imgaug
+                transformed_image = self.imgaug_pipeline(images=np.expand_dims(image, axis=0))
+                # get rid of the batch dim
+                transformed_image = transformed_image[0]
+            else:
+                transformed_image = image
+
+            transformed_image = self.pytorch_transform(transformed_image)
+            clip_images.append(transformed_image)
+            clip_image_paths.append(str(frame_path))
+
+        # Stack images to create video clip tensor: (16, 3, 224, 224)
+        video_clip = torch.stack(clip_images, dim=0)
+        assert video_clip.shape == (16, 3, 224, 224), f'Video clip shape is {video_clip.shape}, expected (16, 3, 224, 224)'
+        return ExampleDict(
+            image=video_clip,  # shape (16, 3, 224, 224)
+            video=video_id,
+            idx=idx,
+            image_path=clip_image_paths,  # list of paths for all 16 frames
+        )
+
+@typechecked
 class MVDataset(torch.utils.data.Dataset):
     """Multi-view dataset that contains images."""
 

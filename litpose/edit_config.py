@@ -71,11 +71,13 @@ def main(args):
     epochs = int(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'epochs'].values[0])
 
     # Handle special models (-mv, -sv, -mvt, -mvt)
-    if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast']):
+    if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast', '-beast-c']):
         model_arch = model.split('-')[0]
         model_path = os.path.join(base_dir, f"logs/ds-{dataset_name}_model-{model}")
         if model.endswith('-beast'):
             model_path = os.path.join(model_path, 'vitb-beast.pth')
+        elif model.endswith('-beast-c'):
+            model_path = os.path.join(model_path, 'vitb-beast-c.pth')
         else:
             model_path = os.path.join(model_path, 'model.safetensors')
         if not os.path.exists(model_path):

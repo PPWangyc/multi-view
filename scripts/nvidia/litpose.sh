@@ -14,8 +14,8 @@
 
 # fly-anipose, mirror-mouse-separate
 dataset=$1
-# resnet50_animal_ap10k, vitb_imagenet, vits_dino, vitb_dino, vitb_dinov2, vitb_dinov3 | Use pretrained model
-# vitb-mv, vitb-sv, vitb-beast, vitb-mvt, vits-mvt, vits-3d-mvt, vits-d-mvt | Need to load pretrained model weights from checkpoint
+# resnet50_animal_ap10k, vitb_imagenet, vits_dino, vitb_dino, vitb_dinov2, vitb_dinov3, vitb_sam | Use pretrained model
+# vitb-mv, vitb-sv, vitb-beast, vitb-beast-c, vitb-mvt, vits-mvt, vits-3d-mvt, vits-d-mvt | Need to load pretrained model weights from checkpoint
 model=$2
 # prediction model type: sv, mv
 model_type=$3

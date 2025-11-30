@@ -15,9 +15,10 @@ from scipy.ndimage import gaussian_filter1d
 from sklearn.metrics import r2_score as r2_score_sklearn
 from tqdm import tqdm
 
-from data.datasets import BaseDataset, MVDataset, MVTDataset
+from data.datasets import BaseDataset, MVDataset, MVTDataset, VideoDataset
 from models.ijepa import IJEPA, vit_base
 from models.mae import MVVisionTransformer, VisionTransformer
+from models.videomae import VideoMAE
 from models.mvt import MultiViewTransformer
 from models.rrr import train_model_main
 from utils.log_utils import get_logger
@@ -29,6 +30,7 @@ _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225] 
 
 NAME_MODEL = {
+    'videomae': VideoMAE,
     'mae': VisionTransformer,
     'svmae': VisionTransformer,
     'mvmae': MVVisionTransformer,
@@ -40,6 +42,7 @@ NAME_DATASET = {
     'mv': MVDataset,
     'mvt': MVTDataset,
     'base': BaseDataset,
+    'video': VideoDataset,
 }
 
 def _std(arr):
