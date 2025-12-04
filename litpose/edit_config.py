@@ -52,8 +52,6 @@ def main(args):
         print(f"Warning: Unknown mode '{mode}', defaulting to finetune mode", file=sys.stderr)
         unfreezing_epoch = 20
     
-    file_name = f"ds-{dataset_name}_mode-{mode}_model-{model}_type-{model_type}_frame-{train_frame}_epoch-{epochs}_seed-{seed}"
-    
     # Determine save directory - use output_base_dir if provided, otherwise use default
     base_dir = os.getcwd()
     if hasattr(args, 'output_base_dir') and args.output_base_dir:
@@ -69,7 +67,7 @@ def main(args):
     hyper_table = pd.read_csv(hyper_table_path)
     learning_rate = float(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'learning_rate'].values[0])
     epochs = int(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'epochs'].values[0])
-
+    file_name = f"ds-{dataset_name}_mode-{mode}_model-{model}_type-{model_type}_frame-{train_frame}_epoch-{epochs}_seed-{seed}"
     # Handle special models (-mv, -sv, -mvt, -mvt)
     if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast', '-beast-c']):
         model_arch = model.split('-')[0]
