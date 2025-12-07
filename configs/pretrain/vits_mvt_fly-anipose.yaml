@@ -26,6 +26,7 @@ model:
     mask_ratio: 0.75 # 0 for no masking, usually 0.75 (MAE)
     norm_pix_loss: False
     decoder_num_channels: 3 # 3 for RGB
+    attn_implementation: "eager"
 
 
 # training configuration

@@ -147,7 +147,7 @@ def load_mae_ckpt(model_path, vit, decoder):
     
     return vit, decoder
     
-class MultiViewTransformer(torch.nn.Module):
+class MultiViewTransformer_OLD(torch.nn.Module):
     """Vision Transformer implementation."""
 
     def __init__(self, config):
@@ -406,7 +406,365 @@ class MultiViewTransformer(torch.nn.Module):
         results_dict = self.get_model_outputs(batch_dict, return_recon=return_recon)
         return results_dict
 
+class MultiViewTransformer(torch.nn.Module):
+    """Vision Transformer implementation."""
+
+    def __init__(self, config):
+        super().__init__()
+        # Set up ViT architecture
+        self.mask_ratio = config['model']['model_params']['mask_ratio']
+        self.avail_views = config['data']['avail_views']
+        self.num_views = len(self.avail_views)
+        config['model']['model_params']['num_views'] = self.num_views
+        self.config = ViTMAEConfig(**config['model']['model_params'])
+
+        self.vit = ViTModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
+        # fix sin-cos embedding
+        self.vit.embeddings.position_embeddings.requires_grad = False
+        
+        h = w = config['model']['model_params']['image_size'] // config['model']['model_params']['patch_size']
+        self.num_patches = h * w
+        self.hidden_size = config['model']['model_params']['hidden_size']
+        # self.view_embeddings = torch.nn.Parameter(torch.randn(1, self.num_views, self.num_patches, self.hidden_size))
+        self.decoder = MultiViewTransformerDecoder(self.config, self.num_patches, self.num_views)
+        # self.vit, self.decoder = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, self.decoder)
+
+    def patchify(self, pixel_values):
+        patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
+        # sanity checks
+        if pixel_values.shape[2] != num_channels:
+            raise ValueError(
+                "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
+            )
+
+        # patchify
+        batch_size = pixel_values.shape[0]
+        num_views = pixel_values.shape[1]
+        num_patches_h = pixel_values.shape[3] // patch_size
+        num_patches_w = pixel_values.shape[4] // patch_size
+        patchified_pixel_values = pixel_values.reshape(
+            batch_size*num_views, num_channels, num_patches_h, patch_size, num_patches_w, patch_size
+        )
+        patchified_pixel_values = torch.einsum("nchpwq->nhwpqc", patchified_pixel_values)
+        patchified_pixel_values = patchified_pixel_values.reshape(
+            batch_size, num_patches_h * num_patches_w * num_views, patch_size**2 * num_channels
+        )
+        return patchified_pixel_values
+
+    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[tuple[int, int]] = None):
+        """
+        Args:
+            patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+                Patchified pixel values.
+            original_image_size (`tuple[int, int]`, *optional*):
+                Original image size.
+
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_views, num_channels, height, width)`:
+                Pixel values.
+        """
+        patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
+        original_image_size = (
+            original_image_size
+            if original_image_size is not None
+            else (self.config.image_size, self.config.image_size)
+        )
+        original_height, original_width = original_image_size
+        num_patches_h = original_height // patch_size
+        num_patches_w = original_width // patch_size
+        # sanity check
+        if num_patches_h * num_patches_w * self.num_views != patchified_pixel_values.shape[1]:
+            raise ValueError(
+                f"The number of patches in the patchified pixel values {patchified_pixel_values.shape[1]}, does not match the number of patches on original image {num_patches_h}*{num_patches_w}*{self.num_views}"
+            )
+
+        # unpatchify
+        batch_size = patchified_pixel_values.shape[0]
+        patchified_pixel_values = patchified_pixel_values.reshape(
+            batch_size * self.num_views,
+            num_patches_h,
+            num_patches_w,
+            patch_size,
+            patch_size,
+            num_channels,
+        )
+        patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
+        pixel_values = patchified_pixel_values.reshape(
+            batch_size,
+            self.num_views,
+            num_channels,
+            num_patches_h * patch_size,
+            num_patches_w * patch_size,
+        )
+        return pixel_values
+
+    def forward_loss(self, pixel_values, pred, mask):
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_views, num_channels, height, width)`):
+                Pixel values.
+            pred (`torch.FloatTensor` of shape `(batch_size, num_patches * num_views, patch_size**2 * num_channels)`:
+                Predicted pixel values.
+            mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                Tensor indicating which patches are masked (1) and which are not (0).
+
+        Returns:
+            `torch.FloatTensor`: Pixel reconstruction loss.
+        """
+        target = self.patchify(pixel_values)
+        if self.config.norm_pix_loss:
+            mean = target.mean(dim=-1, keepdim=True)
+            var = target.var(dim=-1, keepdim=True)
+            target = (target - mean) / (var + 1.0e-6) ** 0.5
+
+        loss = (pred - target) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
+
+    def random_masking(self, sequence, noise=None):
+        """
+        Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
+        noise.
+
+        Args:
+            sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
+            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
+        """
+        batch_size, seq_length, dim = sequence.shape
+        len_keep = int(seq_length * (1 - self.mask_ratio))
+
+        if noise is None:
+            noise = torch.rand(batch_size, seq_length, device=sequence.device)  # noise in [0, 1]
+
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(noise, dim=1).to(sequence.device)  # ascend: small is keep, large is remove
+        ids_restore = torch.argsort(ids_shuffle, dim=1).to(sequence.device)
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :len_keep]
+        sequence_unmasked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
+
+        # generate the binary mask: 0 is keep, 1 is remove
+        mask = torch.ones([batch_size, seq_length], device=sequence.device)
+        mask[:, :len_keep] = 0
+        # unshuffle to get the binary mask
+        mask = torch.gather(mask, dim=1, index=ids_restore)
+
+        return sequence_unmasked, mask, ids_restore
+
+    def adjust_mask_and_ids_restore_after_reshape(
+        self, 
+        mask: torch.Tensor, 
+        ids_restore: torch.Tensor, 
+        batch_size: int, 
+        num_views: int, 
+        num_patches: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Adjust mask and ids_restore after reshaping sequence_output from (B*V, ...) to (B, ...).
+        
+        Args:
+            mask: Tensor of shape (B * V, num_patches) indicating which patches are masked
+            ids_restore: Tensor of shape (B * V, num_patches) with restore indices per view
+            batch_size: Batch size B
+            num_views: Number of views V
+            num_patches: Number of patches per view
+            
+        Returns:
+            new_mask: Tensor of shape (B, V * num_patches) - mask concatenated across views
+            new_ids_restore: Tensor of shape (B, V * num_patches) - ids_restore with proper offsets
+        """
+        device = mask.device
+        
+        # Reshape mask from (B * V, num_patches) to (B, V * num_patches)
+        new_mask = mask.reshape(batch_size, num_views * num_patches)
+        
+        # Adjust ids_restore: each view's indices need to be offset
+        # View 0: 0 to num_patches-1
+        # View 1: num_patches to 2*num_patches-1
+        # View 2: 2*num_patches to 3*num_patches-1, etc.
+        new_ids_restore = ids_restore.reshape(batch_size, num_views, num_patches)
+        # Create offset tensor: [0, num_patches, 2*num_patches, ...]
+        offsets = torch.arange(num_views, device=device) * num_patches
+        offsets = offsets.view(1, num_views, 1)  # (1, V, 1)
+        
+        # Add offsets to each view's restore indices
+        new_ids_restore = new_ids_restore + offsets
+        # Reshape to (B, V * num_patches)
+        new_ids_restore = new_ids_restore.reshape(batch_size, num_views * num_patches)
+
+        return new_mask, new_ids_restore
+
+    def forward(
+        self,
+        x: dict,
+        return_recon: bool = False,
+    ) -> Dict[str, torch.Tensor]:
+        pixel_values = x['output_image']
+        x = x['input_image']
+        
+        
+        B, V, C, H, W = x.shape
+        # shape: (batch * view, channels, img_height, img_width)
+        x = x.reshape(B * V, C, H, W)
+        
+        # create patch embeddings and add position embeddings; remove CLS token
+        embedding_output = self.vit.embeddings(
+            x, bool_masked_pos=None, interpolate_pos_encoding=False,
+        )[:, 1:]
+        # shape: (batch * view, num_patches, embedding_dim)
+        
+        # # Add view embeddings to the sequence
+        # # @Yanchne: I removed view embeddings because it gives more augmentations.
+        # embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
+        # embedding_output += self.view_embeddings
+
+        # reshape embedding_output to (batch, view * num_patches, embedding_dim)
+        # embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)
+
+        # masking: length -> length * config.mask_ratio
+        embeddings, mask, ids_restore = self.random_masking(embedding_output)
+
+        # push data through vit encoder
+        encoder_outputs = self.vit.encoder(
+            embeddings,
+            head_mask=None,
+            # output_attentions=False,
+            # output_hidden_states=False,
+            # return_dict=None,
+        )
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.vit.layernorm(sequence_output)
+
+        # Reshape sequence_output to (batch, view * num_patches * (1 - mask_ratio), embedding_dim)
+        sequence_output = sequence_output.reshape(B, -1, self.hidden_size)
+        mask, ids_restore = self.adjust_mask_and_ids_restore_after_reshape(mask, ids_restore, B, V, self.num_patches)
+        
+        # shape: (batch, length, embedding_dim)
+        # Decoder forward pass
+        decoder_outputs = self.decoder(sequence_output, ids_restore)
+        # shape: (batch, full length, embedding_dim)
+        logits = decoder_outputs.logits
+        
+        loss = self.forward_loss(pixel_values, logits, mask)
+        
+        return_dict = {
+            'logits': logits,
+            'loss': loss,
+            'mask': mask,
+            'ids_restore': ids_restore,
+            'reconstructions': self.unpatchify(logits) if return_recon else None,
+        }
+        return return_dict
+
+    def get_model_outputs(self, batch_dict: dict, return_recon: bool = False) -> dict:
+        x = batch_dict['input_image']
+        
+        B, V, C, H, W = x.shape
+        # shape: (batch * view, channels, img_height, img_width)
+        x = x.reshape(B * V, C, H, W)
+        
+        # create patch embeddings and add position embeddings; remove CLS token
+        embedding_output = self.vit.embeddings(
+            x, bool_masked_pos=None, interpolate_pos_encoding=False
+        )[:, 1:]
+        # shape: (batch * view, num_patches, embedding_dim)
+
+        # reshape embedding_output to (batch, view * num_patches, embedding_dim)
+        embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)
+
+        # push data through vit encoder
+        encoder_outputs = self.vit.encoder(
+            embedding_output,
+            head_mask=None,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=None,
+        )
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.vit.layernorm(sequence_output)
+
+        if not return_recon:
+            return {'latents': sequence_output}
+        else:
+            # no masking
+            mask = torch.zeros_like(embedding_output)[..., 0]
+            ids_restore = torch.arange(embedding_output.shape[1]).unsqueeze(0).repeat(B, 1).to(embedding_output.device)
+            decoder_outputs = self.decoder(sequence_output, ids_restore)
+            logits = decoder_outputs.logits
+            reconstructions = self.unpatchify(logits)
+            return {'logits': logits, 'reconstructions': reconstructions, 'mask': mask}
+
+    def compute_loss(
+        self,
+        stage: str,
+        **kwargs,
+    ) -> tuple[torch.tensor, list[dict]]:
+        assert 'loss' in kwargs, "Loss is not in the kwargs"
+        mse_loss = kwargs['loss']
+        loss = mse_loss
+        return loss
+
+    def predict_step(self, batch_dict: dict, return_recon: bool = False) -> dict:
+        # get model outputs
+        results_dict = self.get_model_outputs(batch_dict, return_recon=return_recon)
+        return results_dict
+
 class MultiViewTransformerDecoder(ViTMAEDecoder):
+    def __init__(self, config, num_patches, num_views):
+        super().__init__(config, num_patches) # 196 is the number of patches in the decoder
+
+        # re-initialize the decoder_pred based on the decoder_num_channels
+        self.decoder_pred = nn.Linear(
+            config.decoder_hidden_size, config.patch_size**2 * config.decoder_num_channels, bias=True
+        )  # encoder to decoder
+
+        # # re-initialize the decoder position embeddings per view
+        # decoder_pos_embed_dict = {}
+        # for i in range(num_views):
+        #     decoder_pos_embed_dict[i] = torch.from_numpy(
+        #         get_2d_sincos_pos_embed(config.decoder_hidden_size, int(num_patches**0.5), add_cls_token=False)
+        #     ).float().unsqueeze(0)
+        # self.decoder_pos_embed = nn.Parameter(torch.cat([decoder_pos_embed_dict[i] for i in range(num_views)], dim=1), requires_grad=False)
+        
+        # learnable view embeddings
+        self.decoder_view_embed = torch.nn.Parameter(
+            torch.randn(1, num_views*num_patches, config.decoder_hidden_size), requires_grad=True)
+
+    def forward(self, hidden_states, ids_restore):
+        # embed tokens
+        x = self.decoder_embed(hidden_states)
+        B, _, D = x.shape
+
+        # append mask tokens to sequence
+        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
+        x_ = torch.cat([x, mask_tokens], dim=1) 
+        # unshuffle
+        x = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]).to(x_.device))
+        # add pos embed
+        x = x.reshape(B * self.config.num_views, -1, D)
+        hidden_states = x + self.decoder_pos_embed[:,1:] # skip cls token
+        hidden_states = hidden_states.reshape(B, -1, D)
+        
+        # # add view embeddings
+        hidden_states += self.decoder_view_embed
+
+        # apply Transformer layers (blocks)
+        for i, layer_module in enumerate(self.decoder_layers):
+            hidden_states = layer_module(hidden_states)
+
+        hidden_states = self.decoder_norm(hidden_states)
+
+        # predictor projection
+        logits = self.decoder_pred(hidden_states)
+
+        return ViTMAEDecoderOutput(
+            logits=logits,
+        ) 
+
+class MultiViewTransformerDecoder_OLD(ViTMAEDecoder):
     def __init__(self, config, num_patches, num_views):
         super().__init__(config, num_patches) # 196 is the number of patches in the decoder
 
@@ -460,6 +818,7 @@ class MultiViewTransformerDecoder(ViTMAEDecoder):
         return ViTMAEDecoderOutput(
             logits=logits,
         ) 
+
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
     """
