@@ -23,16 +23,18 @@ import os
 class MultiObjectTracker:
     """Simple IoU-based tracker for maintaining object identities across frames."""
     
-    def __init__(self, iou_threshold: float = 0.3, max_age: int = 5):
+    def __init__(self, iou_threshold: float = 0.3, max_age: int = 5, lock_tracks: bool = False):
         """
         Args:
             iou_threshold: Minimum IoU to associate detections with tracks
             max_age: Maximum frames a track can be missing before deletion
+            lock_tracks: If True, don't create new tracks after initialization
         """
         self.iou_threshold = iou_threshold
         self.max_age = max_age
         self.tracks: Dict[int, Dict] = {}  # track_id -> track info
         self.next_id = 1
+        self.lock_tracks = lock_tracks  # Prevent creating new tracks after initialization
         
     def _calculate_iou(self, box1: np.ndarray, box2: np.ndarray) -> float:
         """Calculate IoU between two bounding boxes in xyxy format."""
@@ -114,12 +116,13 @@ class MultiObjectTracker:
                     matches[track_id] = d_idx
                     used_detections.add(d_idx)
             
-            # Create new tracks for unmatched detections
-            for d_idx in range(n_detections):
-                if d_idx not in used_detections:
-                    track_id = self.next_id
-                    self.next_id += 1
-                    matches[track_id] = d_idx
+            # Create new tracks for unmatched detections (only if not locked)
+            if not self.lock_tracks:
+                for d_idx in range(n_detections):
+                    if d_idx not in used_detections:
+                        track_id = self.next_id
+                        self.next_id += 1
+                        matches[track_id] = d_idx
         
         # Update tracks
         tracked_objects = {}
@@ -379,9 +382,12 @@ def process_video(
     # Load SAM3 model
     model, processor = load_sam3_model(device)
     
-    # Initialize tracker
-    tracker = MultiObjectTracker(iou_threshold=tracker_iou_threshold)
+    # Initialize tracker with lock_tracks if num_object is specified
+    # This ensures we only track the objects selected in the first frame
+    lock_tracks = num_object is not None
+    tracker = MultiObjectTracker(iou_threshold=tracker_iou_threshold, lock_tracks=lock_tracks)
     track_colors = {}
+    first_frame_processed = False
     
     # Open video
     cap = cv2.VideoCapture(video_path)
@@ -459,15 +465,21 @@ def process_video(
                 model, processor, frame, text_prompt, device, threshold
             )
             
-            # Filter to top num_object objects by confidence score
-            if num_object is not None and len(scores) > num_object:
-                # Sort by scores in descending order and take top N
-                top_indices = np.argsort(scores)[::-1][:num_object]
-                masks = masks[top_indices]
-                boxes = boxes[top_indices]
-                scores = scores[top_indices]
+            # For first frame: select top num_object objects and initialize tracker
+            # For subsequent frames: track only those initial objects
+            if not first_frame_processed:
+                # First frame: select top num_object objects
+                if num_object is not None and len(scores) > 0:
+                    # Sort by scores in descending order and take top N
+                    top_indices = np.argsort(scores)[::-1][:num_object]
+                    masks = masks[top_indices]
+                    boxes = boxes[top_indices]
+                    scores = scores[top_indices]
+                    print(f"First frame: Selected top {len(scores)} objects to track throughout video")
+                first_frame_processed = True
+            # For subsequent frames, don't filter - let tracker match to existing tracks only
             
-            # Update tracker
+            # Update tracker (will only match to existing tracks if lock_tracks=True)
             tracked_objects = tracker.update(boxes, scores, masks)
             
             # Update track colors for new tracks
@@ -536,7 +548,7 @@ def main():
         print(f"CUDA available: {torch.cuda.is_available()}\n")
     device = 'cuda:5'
     max_frames = None  # Set to None to process all frames, or a number to limit
-    # max_frames = 128
+    # max_frames = 256
     num_object = 3  # Set to desired number (e.g., 5) to track top N objects, None for all
     
     # Memory and I/O optimization settings for long videos
