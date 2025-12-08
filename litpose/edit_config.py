@@ -60,7 +60,6 @@ def main(args):
         # Default to outputs directory in current working directory
         output_base_dir = os.path.join(base_dir, 'outputs')
     
-    save_dir = os.path.join(output_base_dir, file_name)
 
     # load learning rate from hyper_table.csv
     hyper_table_path = os.path.join(base_dir, 'configs', 'litpose', 'litpose_hyper.csv')
@@ -68,8 +67,9 @@ def main(args):
     learning_rate = float(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'learning_rate'].values[0])
     epochs = int(hyper_table.loc[(hyper_table['model'] == model) & (hyper_table['dataset'] == dataset_name) & (hyper_table['model_type'] == model_type), 'epochs'].values[0])
     file_name = f"ds-{dataset_name}_mode-{mode}_model-{model}_type-{model_type}_frame-{train_frame}_epoch-{epochs}_seed-{seed}"
+    save_dir = os.path.join(output_base_dir, file_name)
     # Handle special models (-mv, -sv, -mvt, -mvt)
-    if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast', '-beast-c']):
+    if any(model.endswith(suffix) for suffix in ['-mv', '-sv', '-mvt', '-mvt', '-beast', '-beast-c', '-mae']):
         model_arch = model.split('-')[0]
         model_path = os.path.join(base_dir, f"logs/ds-{dataset_name}_model-{model}")
         if model.endswith('-beast'):

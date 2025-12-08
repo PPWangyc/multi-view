@@ -6,7 +6,6 @@ import wandb
 # accelerate
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
-from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
 from beast.io import load_config
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -53,11 +52,6 @@ def main():
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb logging.")
             use_wandb = False
 
-    # imgaug transform
-    pipe_params = config.get('training', {}).get('imgaug', 'none')
-    if isinstance(pipe_params, str):
-        pipe_params = expand_imgaug_str_to_dict(pipe_params)
-    imgaug_pipeline_ = imgaug_pipeline(pipe_params)
     # dataset
     dataset = NAME_DATASET[config['data']['name']](
         data_dir=config['data']['data_dir'],

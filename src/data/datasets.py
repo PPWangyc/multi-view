@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 from PIL import Image
 from torchvision import transforms
+from torchvision.transforms import v2
 from typeguard import typechecked
 
 from data.data_types import EncodingDict, ExampleDict, MultiViewDict
@@ -22,7 +23,7 @@ _IMAGENET_STD = [0.229, 0.224, 0.225]
 class BaseDataset(torch.utils.data.Dataset):
     """Base dataset that contains images."""
 
-    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None) -> None:
+    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None, config: dict = None) -> None:
         """Initialize a dataset for autoencoder models.
 
         Parameters
@@ -43,9 +44,11 @@ class BaseDataset(torch.utils.data.Dataset):
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [
-            transforms.ToTensor(),
-            transforms.Resize((224, 224)),
-            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+            v2.ToImage(),
+            transforms.RandomResizedCrop(config['model']['model_params']['image_size'], scale=(0.2, 1.0), interpolation=3),
+            transforms.RandomHorizontalFlip(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
         ]
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
 

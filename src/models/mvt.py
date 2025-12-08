@@ -678,10 +678,10 @@ class MultiViewTransformer(torch.nn.Module):
         # push data through vit encoder
         encoder_outputs = self.vit.encoder(
             embedding_output,
-            head_mask=None,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=None,
+            # head_mask=None,
+            # output_attentions=False,
+            # output_hidden_states=False,
+            # return_dict=None,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.vit.layernorm(sequence_output)
