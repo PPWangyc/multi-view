@@ -54,9 +54,10 @@ def _std(arr):
 
 def get_experiment_name(config):
     model_name = config['model']['name']
+    model_type = config['model']['type']
     type_name = config['data']['name']
     dataset_name = config['data']['data_dir'].split('/')[-1]
-    return f'{model_name}_{type_name}_{dataset_name}_pretrain'
+    return f'{model_name}_{model_type}_{type_name}_{dataset_name}_pretrain'
 
 def denormalize_image(image):
     """

@@ -106,7 +106,7 @@ def main():
     dataloader = accelerator.prepare(dataloader)
     batch = next(iter(dataloader))
     # model
-    model = NAME_MODEL[config['model']['name']](config)
+    model = NAME_MODEL[config['model']['type']](config)
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -165,7 +165,7 @@ def main():
         "warmup_percentage": config['optimizer']['warmup_pct'],
         "scheduler_type": "OneCycleLR",
         "optimizer_type": "AdamW",
-        "model_name": config['model']['name'],
+        "model_name": config['model']['type'],
         "seed": args.seed,
     }
     
@@ -190,7 +190,7 @@ def main():
     logger.info(f"Dataset size: {len(dataset)} samples")
     logger.info(f"Steps per epoch: {len(dataloader)}")
     logger.info(f"Available views: {num_views}")
-    logger.info(f"Model: {config['model']['name']}")
+    logger.info(f"Model: {config['model']['type']}")
     logger.info(f"Log every n epochs: {log_every_n_epochs}")
     logger.info(f"Save every n epochs: {save_every_n_epochs}")
     logger.info("=" * 50)
@@ -233,7 +233,7 @@ def main():
                 if should_update:  # Only step scheduler on regular updates, not on leftover batches
                     scheduler.step()
                 # -- update target encoder for ijepa (DDP/Accelerate-safe) ---
-                if 'ijepa' in config['model']['name'].lower():
+                if 'ijepa' in config['model']['type'].lower():
                     if hasattr(model, 'update_target'):
                         model.update_target()
                     elif hasattr(model, 'module') and hasattr(model.module, 'update_target'):

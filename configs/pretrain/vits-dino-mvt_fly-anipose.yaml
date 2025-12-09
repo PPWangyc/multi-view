@@ -1,6 +1,7 @@
 # model configuration
 model:
-  name: mvt
+  name: vits-dino-mvt
+  type: mvt
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit

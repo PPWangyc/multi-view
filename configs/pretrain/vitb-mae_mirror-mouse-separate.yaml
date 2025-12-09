@@ -1,9 +1,11 @@
 # model configuration
 model:
-  name: svmae
+  name: vitb-mae
+  type: svmae
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
+  pretrained: facebook/vit-mae-base
   model_params:
     hidden_size: 768
     num_hidden_layers: 12
@@ -41,15 +43,17 @@ training:
   # frequency to log training metrics
   log_every_n_steps: 10
   log_every_n_epochs: 20
-  # frequency to save model
-  save_every_n_epochs: 100
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
-  # resume: logs/2025_08_06_22_07_14_mvmae_mv_fly-anipose_pretrain
   resume: null
   resume_from_best: false
+  # frequency to save model
+  save_every_n_epochs: 100
+  save_plots: true
+  save_plots_every_n_epochs: 10
 
   effective_batch_size: 1024 # if null, use the default value from the optimizer
+
   use_wandb: true
   use_bfloat16: true
 
@@ -67,4 +71,4 @@ optimizer:
 # data configuration
 data:
   name: base
-  data_dir: data/ssl/ibl-mouse-separate
+  data_dir: data/ssl/mirror-mouse-separate
