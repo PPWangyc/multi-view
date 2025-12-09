@@ -140,6 +140,9 @@ def load_mae_ckpt(model_path, vit, decoder):
         decoder_state_dict['decoder_pred.weight'] = ckpt['decoder_pred.weight']
         decoder_state_dict['decoder_pred.bias'] = ckpt['decoder_pred.bias']
     
+    if decoder is None:
+        print(f'Skipping decoder loading')
+        return vit, None
     # Load into decoder model
     missing_keys_dec, unexpected_keys_dec = decoder.load_state_dict(decoder_state_dict, strict=False)
     print(f'Decoder missing keys: {missing_keys_dec}')
@@ -417,7 +420,9 @@ class MultiViewTransformer(torch.nn.Module):
         self.num_views = len(self.avail_views)
         config['model']['model_params']['num_views'] = self.num_views
         self.config = ViTMAEConfig(**config['model']['model_params'])
-
+        MAE_VIT_SMALL_PATH = config['model']['pretrained']
+        if 'vit-small-patch16-224.pth' in MAE_VIT_SMALL_PATH:
+            config['model']['pretrained'] = 'facebook/dino-vits16'
         self.vit = ViTModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
         # fix sin-cos embedding
         self.vit.embeddings.position_embeddings.requires_grad = False
@@ -427,7 +432,9 @@ class MultiViewTransformer(torch.nn.Module):
         self.hidden_size = config['model']['model_params']['hidden_size']
         # self.view_embeddings = torch.nn.Parameter(torch.randn(1, self.num_views, self.num_patches, self.hidden_size))
         self.decoder = MultiViewTransformerDecoder(self.config, self.num_patches, self.num_views)
-        # self.vit, self.decoder = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, self.decoder)
+        if 'vit-small-patch16-224.pth' in MAE_VIT_SMALL_PATH:
+        #   self.vit, self.decoder = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, self.decoder)
+          self.vit, _ = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, None)
 
     def patchify(self, pixel_values):
         patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
@@ -630,7 +637,7 @@ class MultiViewTransformer(torch.nn.Module):
         # push data through vit encoder
         encoder_outputs = self.vit.encoder(
             embeddings,
-            head_mask=None,
+            # head_mask=None,
             # output_attentions=False,
             # output_hidden_states=False,
             # return_dict=None,

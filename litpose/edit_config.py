@@ -86,6 +86,10 @@ def main(args):
             model_version = 'imagenet'
         else:
             raise ValueError(f"Unknown model architecture: {model_arch}")
+        if 'dinov3' in model:
+            model_version = 'dinov3'
+        elif 'dinov2' in model:
+            model_version = 'dinov2'
         model = f'{model_arch}_{model_version}'
         # Set the pretrain model path
         if 'model' not in litpose_config:

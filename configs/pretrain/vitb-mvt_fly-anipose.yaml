@@ -1,9 +1,10 @@
 # model configuration
 model:
-  name: svmae
+  name: mvt
   seed: 0
   checkpoint: null  # load weights from checkpoint
   model_class: vit
+  pretrained: facebook/vit-mae-base
   model_params:
     hidden_size: 768
     num_hidden_layers: 12
@@ -31,7 +32,7 @@ model:
 training:
   seed: 0
   imgaug: default
-  train_batch_size: 256    # per GPU
+  train_batch_size: 32    # per GPU
   val_batch_size: 1024
   test_batch_size: 128
   num_epochs: 800
@@ -47,12 +48,12 @@ training:
   resume_from_best: false
   # frequency to save model
   save_every_n_epochs: 100
-  save_plots: true
+  save_plots: false
   save_plots_every_n_epochs: 10
 
   effective_batch_size: 1024 # if null, use the default value from the optimizer
 
-  use_wandb: true
+  use_wandb: false
   use_bfloat16: true
 
 # optimizer configuration
@@ -68,5 +69,5 @@ optimizer:
 
 # data configuration
 data:
-  name: base
+  name: mvt
   data_dir: data/ssl/fly-anipose

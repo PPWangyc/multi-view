@@ -7,14 +7,175 @@ from transformers.models.vit_mae.modeling_vit_mae import (ViTMAEDecoder,
                                                           ViTMAEDecoderOutput)
 
 
+def load_mae_ckpt(model_path, vit_mae):
+    """
+    Load pretrained ImageNet ViT-Small MAE weights into a ViTMAE model.
+    
+    Args:
+        model_path: Path to the checkpoint file
+        vit_mae: ViTMAE model instance to load weights into
+    
+    Returns:
+        vit_mae: The model with loaded weights
+    """
+    ckpt = torch.load(model_path, map_location='cpu')['model']
+    print(f'Loading MAE checkpoint from {model_path}...')
+    
+    vit = vit_mae.vit
+    decoder = vit_mae.decoder
+    
+    vit_state_dict = vit.state_dict()
+    new_state_dict = {}
+    
+    # Load patch embeddings
+    if 'patch_embed.proj.weight' in ckpt:
+        new_state_dict['embeddings.patch_embeddings.projection.weight'] = ckpt['patch_embed.proj.weight']
+        new_state_dict['embeddings.patch_embeddings.projection.bias'] = ckpt['patch_embed.proj.bias']
+    
+    # Load position embeddings (excluding cls token position)
+    if 'pos_embed' in ckpt:
+        # MAE pos_embed includes cls token, ViT position_embeddings doesn't include it separately
+        new_state_dict['embeddings.position_embeddings'] = ckpt['pos_embed']
+    
+    # Load cls token
+    if 'cls_token' in ckpt:
+        new_state_dict['embeddings.cls_token'] = ckpt['cls_token']
+    
+    # Load encoder blocks
+    for i in range(12):  # 12 layers for ViT-Small
+        mae_prefix = f'blocks.{i}'
+        vit_prefix = f'encoder.layer.{i}'
+        
+        # Layer norm before attention
+        new_state_dict[f'{vit_prefix}.layernorm_before.weight'] = ckpt[f'{mae_prefix}.norm1.weight']
+        new_state_dict[f'{vit_prefix}.layernorm_before.bias'] = ckpt[f'{mae_prefix}.norm1.bias']
+        
+        # Attention: Split QKV into separate Q, K, V
+        qkv_weight = ckpt[f'{mae_prefix}.attn.qkv.weight']
+        qkv_bias = ckpt[f'{mae_prefix}.attn.qkv.bias']
+        
+        # Split into Q, K, V (each is 1/3 of the combined dimension)
+        dim = qkv_weight.shape[0] // 3
+        new_state_dict[f'{vit_prefix}.attention.attention.query.weight'] = qkv_weight[:dim]
+        new_state_dict[f'{vit_prefix}.attention.attention.query.bias'] = qkv_bias[:dim]
+        new_state_dict[f'{vit_prefix}.attention.attention.key.weight'] = qkv_weight[dim:2*dim]
+        new_state_dict[f'{vit_prefix}.attention.attention.key.bias'] = qkv_bias[dim:2*dim]
+        new_state_dict[f'{vit_prefix}.attention.attention.value.weight'] = qkv_weight[2*dim:]
+        new_state_dict[f'{vit_prefix}.attention.attention.value.bias'] = qkv_bias[2*dim:]
+        
+        # Attention output projection
+        new_state_dict[f'{vit_prefix}.attention.output.dense.weight'] = ckpt[f'{mae_prefix}.attn.proj.weight']
+        new_state_dict[f'{vit_prefix}.attention.output.dense.bias'] = ckpt[f'{mae_prefix}.attn.proj.bias']
+        
+        # Layer norm after attention
+        new_state_dict[f'{vit_prefix}.layernorm_after.weight'] = ckpt[f'{mae_prefix}.norm2.weight']
+        new_state_dict[f'{vit_prefix}.layernorm_after.bias'] = ckpt[f'{mae_prefix}.norm2.bias']
+        
+        # MLP
+        new_state_dict[f'{vit_prefix}.intermediate.dense.weight'] = ckpt[f'{mae_prefix}.mlp.fc1.weight']
+        new_state_dict[f'{vit_prefix}.intermediate.dense.bias'] = ckpt[f'{mae_prefix}.mlp.fc1.bias']
+        new_state_dict[f'{vit_prefix}.output.dense.weight'] = ckpt[f'{mae_prefix}.mlp.fc2.weight']
+        new_state_dict[f'{vit_prefix}.output.dense.bias'] = ckpt[f'{mae_prefix}.mlp.fc2.bias']
+    
+    # Load final layer norm
+    if 'norm.weight' in ckpt:
+        new_state_dict['layernorm.weight'] = ckpt['norm.weight']
+        new_state_dict['layernorm.bias'] = ckpt['norm.bias']
+    
+    # Load into ViT model (strict=False to allow missing pooler weights)
+    missing_keys, unexpected_keys = vit.load_state_dict(new_state_dict, strict=False)
+    print(f'ViT Missing keys: {missing_keys}')
+    print(f'ViT Unexpected keys: {unexpected_keys}')
+    
+    # Load decoder weights
+    decoder_state_dict = {}
+    
+    # Load decoder-specific tokens and embeddings
+    if 'mask_token' in ckpt:
+        decoder_state_dict['mask_token'] = ckpt['mask_token']
+    
+    if 'decoder_pos_embed' in ckpt:
+        decoder_state_dict['decoder_pos_embed'] = ckpt['decoder_pos_embed']
+    
+    # Load decoder_view_embed if it exists in your decoder
+    if 'decoder_view_embed' in ckpt:
+        decoder_state_dict['decoder_view_embed'] = ckpt['decoder_view_embed']
+    
+    # Load decoder embedding projection
+    if 'decoder_embed.weight' in ckpt:
+        decoder_state_dict['decoder_embed.weight'] = ckpt['decoder_embed.weight']
+        decoder_state_dict['decoder_embed.bias'] = ckpt['decoder_embed.bias']
+    
+    # Load decoder transformer blocks
+    for i in range(8):  # 8 decoder layers for MAE
+        mae_prefix = f'decoder_blocks.{i}'
+        dec_prefix = f'decoder_layers.{i}'
+        
+        # Layer norm before attention
+        decoder_state_dict[f'{dec_prefix}.layernorm_before.weight'] = ckpt[f'{mae_prefix}.norm1.weight']
+        decoder_state_dict[f'{dec_prefix}.layernorm_before.bias'] = ckpt[f'{mae_prefix}.norm1.bias']
+        
+        # Attention: Split QKV into separate Q, K, V
+        qkv_weight = ckpt[f'{mae_prefix}.attn.qkv.weight']
+        qkv_bias = ckpt[f'{mae_prefix}.attn.qkv.bias']
+        
+        # Split into Q, K, V
+        dim = qkv_weight.shape[0] // 3
+        decoder_state_dict[f'{dec_prefix}.attention.attention.query.weight'] = qkv_weight[:dim]
+        decoder_state_dict[f'{dec_prefix}.attention.attention.query.bias'] = qkv_bias[:dim]
+        decoder_state_dict[f'{dec_prefix}.attention.attention.key.weight'] = qkv_weight[dim:2*dim]
+        decoder_state_dict[f'{dec_prefix}.attention.attention.key.bias'] = qkv_bias[dim:2*dim]
+        decoder_state_dict[f'{dec_prefix}.attention.attention.value.weight'] = qkv_weight[2*dim:]
+        decoder_state_dict[f'{dec_prefix}.attention.attention.value.bias'] = qkv_bias[2*dim:]
+        
+        # Attention output projection
+        decoder_state_dict[f'{dec_prefix}.attention.output.dense.weight'] = ckpt[f'{mae_prefix}.attn.proj.weight']
+        decoder_state_dict[f'{dec_prefix}.attention.output.dense.bias'] = ckpt[f'{mae_prefix}.attn.proj.bias']
+        
+        # Layer norm after attention
+        decoder_state_dict[f'{dec_prefix}.layernorm_after.weight'] = ckpt[f'{mae_prefix}.norm2.weight']
+        decoder_state_dict[f'{dec_prefix}.layernorm_after.bias'] = ckpt[f'{mae_prefix}.norm2.bias']
+        
+        # MLP
+        decoder_state_dict[f'{dec_prefix}.intermediate.dense.weight'] = ckpt[f'{mae_prefix}.mlp.fc1.weight']
+        decoder_state_dict[f'{dec_prefix}.intermediate.dense.bias'] = ckpt[f'{mae_prefix}.mlp.fc1.bias']
+        decoder_state_dict[f'{dec_prefix}.output.dense.weight'] = ckpt[f'{mae_prefix}.mlp.fc2.weight']
+        decoder_state_dict[f'{dec_prefix}.output.dense.bias'] = ckpt[f'{mae_prefix}.mlp.fc2.bias']
+    
+    # Load decoder final layer norm
+    if 'decoder_norm.weight' in ckpt:
+        decoder_state_dict['decoder_norm.weight'] = ckpt['decoder_norm.weight']
+        decoder_state_dict['decoder_norm.bias'] = ckpt['decoder_norm.bias']
+    
+    # Load decoder prediction head
+    if 'decoder_pred.weight' in ckpt:
+        decoder_state_dict['decoder_pred.weight'] = ckpt['decoder_pred.weight']
+        decoder_state_dict['decoder_pred.bias'] = ckpt['decoder_pred.bias']
+    
+    if decoder is None:
+        print(f'Skipping decoder loading')
+        return vit_mae
+    
+    # Load into decoder model
+    missing_keys_dec, unexpected_keys_dec = decoder.load_state_dict(decoder_state_dict, strict=False)
+    print(f'Decoder missing keys: {missing_keys_dec}')
+    print(f'Decoder unexpected keys: {unexpected_keys_dec}')
+    
+    return vit_mae
+
 class VisionTransformer(torch.nn.Module):
     """Vision Transformer implementation."""
 
     def __init__(self, config):
         super().__init__()
         # Set up ViT architecture
+        VIT_MAE_SMALL_PATH = config['model']['pretrained']
         self.vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
-        self.vit_mae = ViTMAE(self.vit_mae_config).from_pretrained("facebook/vit-mae-base")
+        self.vit_mae = ViTMAE(self.vit_mae_config)
+        if 'vit-small-patch16-224.pth' in VIT_MAE_SMALL_PATH:
+            self.vit_mae = load_mae_ckpt(VIT_MAE_SMALL_PATH, self.vit_mae)
+        else:
+            self.vit_mae.from_pretrained(config['model']['pretrained'])
         self.mask_ratio = config['model']['model_params']['mask_ratio']
 
     def forward(
@@ -102,7 +263,6 @@ class MVVisionTransformer(VisionTransformer):
         # reset mask_ratio to the original value
         self.vit_mae.config.mask_ratio = self.mask_ratio
         return results_dict
-
 
 class MultiViewDecoder(ViTMAEDecoder):
     def __init__(self, config):
