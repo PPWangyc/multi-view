@@ -175,7 +175,7 @@ class VisionTransformer(torch.nn.Module):
         if 'vit-small-patch16-224.pth' in VIT_MAE_SMALL_PATH:
             self.vit_mae = load_mae_ckpt(VIT_MAE_SMALL_PATH, self.vit_mae)
         else:
-            self.vit_mae.from_pretrained(config['model']['pretrained'])
+            self.vit_mae = self.vit_mae.from_pretrained(config['model']['pretrained'])
         self.mask_ratio = config['model']['model_params']['mask_ratio']
 
     def forward(
