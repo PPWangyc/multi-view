@@ -294,10 +294,18 @@ def plot_example_images(batch, results_dict, recon_num=8, save_path=None):
     """
     # Extract images and views
     if 'input_image' in batch:
-        input_images = batch['input_image'][:recon_num]
-        output_images = batch['output_image'][:recon_num]
-        input_views = batch['input_view'][:recon_num]
-        output_views = batch['output_view'][:recon_num]
+        if batch['input_image'].ndim == 5:
+            input_images = batch['input_image'][0]
+            output_images = batch['output_image'][0]
+            input_views = [input[0] for input in batch['input_view']]
+            output_views = [output[0] for output in batch['output_view']]
+            recon_num = input_images.shape[0]
+            results_dict['reconstructions'] = results_dict['reconstructions'][0]
+        else:
+            input_images = batch['input_image'][:recon_num]
+            output_images = batch['output_image'][:recon_num]
+            input_views = batch['input_view'][:recon_num]
+            output_views = batch['output_view'][:recon_num]
     else:
         input_images = batch['image'][:recon_num]
         output_images = batch['image'][:recon_num]
@@ -320,7 +328,6 @@ def plot_example_images(batch, results_dict, recon_num=8, save_path=None):
     # If only one example, make axes 2D
     if recon_num == 1:
         axes = axes.reshape(1, -1)
-    
     # Plot images
     for i in range(recon_num):
         # Input images (first column)

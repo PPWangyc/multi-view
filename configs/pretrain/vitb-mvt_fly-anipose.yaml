@@ -25,7 +25,8 @@ model:
     decoder_intermediate_size: 2048
     mask_ratio: 0.75 # 0 for no masking, usually 0.75 (MAE)
     norm_pix_loss: False
-
+    decoder_num_channels: 3 # 3 for RGB
+    attn_implementation: "eager"
     embed_size: 768 # projected embedding size, used for contrastive learning
 
 # training configuration
@@ -48,12 +49,12 @@ training:
   resume_from_best: false
   # frequency to save model
   save_every_n_epochs: 100
-  save_plots: false
+  save_plots: true
   save_plots_every_n_epochs: 10
 
-  effective_batch_size: 1024 # if null, use the default value from the optimizer
+  effective_batch_size: 256 # if null, use the default value from the optimizer
 
-  use_wandb: false
+  use_wandb: true
   use_bfloat16: true
 
 # optimizer configuration

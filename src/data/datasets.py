@@ -269,7 +269,7 @@ class VideoDataset(torch.utils.data.Dataset):
 class MVDataset(torch.utils.data.Dataset):
     """Multi-view dataset that contains images."""
 
-    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None) -> None:
+    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None, config: dict = None) -> None:
         """Initialize a multi-view dataset.
 
         Parameters
@@ -334,9 +334,11 @@ class MVDataset(torch.utils.data.Dataset):
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [
-            transforms.ToTensor(),
-            transforms.Resize((224, 224)),
-            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+            v2.ToImage(),
+            transforms.RandomResizedCrop(config['model']['model_params']['image_size'], scale=(0.2, 1.0), interpolation=3),
+            transforms.RandomHorizontalFlip(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
         ]
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
 
@@ -474,9 +476,11 @@ class MVTDataset(torch.utils.data.Dataset):
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [
-            transforms.ToTensor(),
-            transforms.Resize((224, 224)),
-            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+            v2.ToImage(),
+            transforms.RandomResizedCrop(config['model']['model_params']['image_size'], scale=(0.2, 1.0), interpolation=3),
+            transforms.RandomHorizontalFlip(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
         ]
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
         
@@ -557,9 +561,13 @@ class MVTDataset(torch.utils.data.Dataset):
             output_image = output_channels[0]
         else:
             output_image = torch.cat(output_channels, dim=1)  # shape (view, total_channels, H, W)
+        input_views = [view for view in self.available_views]
+        output_views = [view for view in self.available_views]
         return MultiViewDict(
             input_image=input_image,  # shape (view, channels, img_height, img_width)
             output_image=output_image,  # shape (view, channels, img_height, img_width)
+            input_view=input_views,
+            output_view=output_views,
             video_id=video_id,
             frame_id=frame_id,
             idx=idx,

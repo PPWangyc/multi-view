@@ -7,6 +7,7 @@ fly-anipose,vits-3d-mvt,heatmap_multiview_transformer,0.0005,500
 fly-anipose,vitb_imagenet,heatmap_multiview_transformer,0.0001,300
 fly-anipose,vitb-sv,heatmap_multiview_transformer,0.0001,300
 fly-anipose,vitb-mv,heatmap_multiview_transformer,0.0001,300
+fly-anipose,vitb_imagenet,heatmap,0.0001,300
 fly-anipose,vitb-mae,heatmap,0.0001,300
 fly-anipose,vits-dino-mvt,heatmap,0.0001,300
 fly-anipose,resnet50_animal_ap10k,heatmap_multiview_transformer,0.001,300

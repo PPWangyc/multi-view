@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from jaxtyping import Float
-from transformers import ViTMAEConfig, ViTMAEForPreTraining, ViTModel
+from transformers import ViTMAEConfig, ViTMAEForPreTraining, ViTModel, AutoModel
 from transformers.models.vit_mae.modeling_vit_mae import (ViTMAEDecoder,
                                                           ViTMAEDecoderOutput)
 MAE_VIT_SMALL_PATH = "data/checkpoints/mae/vit-small/vit-small-patch16-224.pth"
@@ -420,10 +420,11 @@ class MultiViewTransformer(torch.nn.Module):
         self.num_views = len(self.avail_views)
         config['model']['model_params']['num_views'] = self.num_views
         self.config = ViTMAEConfig(**config['model']['model_params'])
-        MAE_VIT_SMALL_PATH = config['model']['pretrained']
-        if 'vit-small-patch16-224.pth' in MAE_VIT_SMALL_PATH:
+        self.pretrained_ckpt = config['model']['pretrained']
+        if 'vit-small-patch16-224.pth' in self.pretrained_ckpt:
             config['model']['pretrained'] = 'facebook/dino-vits16'
-        self.vit = ViTModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
+        self.vit = AutoModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
+        # self.vit = ViTModel.from_pretrained(config['model']['pretrained'], use_safetensors=True)
         # fix sin-cos embedding
         self.vit.embeddings.position_embeddings.requires_grad = False
         
@@ -432,9 +433,10 @@ class MultiViewTransformer(torch.nn.Module):
         self.hidden_size = config['model']['model_params']['hidden_size']
         # self.view_embeddings = torch.nn.Parameter(torch.randn(1, self.num_views, self.num_patches, self.hidden_size))
         self.decoder = MultiViewTransformerDecoder(self.config, self.num_patches, self.num_views)
-        if 'vit-small-patch16-224.pth' in MAE_VIT_SMALL_PATH:
+        if 'vit-small-patch16-224.pth' in self.pretrained_ckpt:
         #   self.vit, self.decoder = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, self.decoder)
-          self.vit, _ = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, None)
+          self.vit, _ = load_mae_ckpt(self.pretrained_ckpt, self.vit, None)
+          print('loaded vit-small-patch16-224.pth')
 
     def patchify(self, pixel_values):
         patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
@@ -604,10 +606,16 @@ class MultiViewTransformer(torch.nn.Module):
 
         return new_mask, new_ids_restore
 
+    def forward_mae_embeddings(self, x):
+        embeddings, mask, ids_restore = self.vit.embeddings(
+            x
+        )
+        return embeddings[:,1:], mask, ids_restore
+
     def forward(
         self,
         x: dict,
-        return_recon: bool = False,
+        return_recon: bool = True,
     ) -> Dict[str, torch.Tensor]:
         pixel_values = x['output_image']
         x = x['input_image']
@@ -616,24 +624,28 @@ class MultiViewTransformer(torch.nn.Module):
         B, V, C, H, W = x.shape
         # shape: (batch * view, channels, img_height, img_width)
         x = x.reshape(B * V, C, H, W)
+        if 'mae' in self.pretrained_ckpt:
+            embeddings, mask, ids_restore = self.forward_mae_embeddings(x)
+        else:
+            # create patch embeddings and add position embeddings; remove CLS token
+            embedding_output = self.vit.embeddings(
+                x, 
+                # bool_masked_pos=None, 
+                # interpolate_pos_encoding=False,
+            )[:, 1:]
+            # shape: (batch * view, num_patches, embedding_dim)
+            
+            # # Add view embeddings to the sequence
+            # # @Yanchne: I removed view embeddings because it gives more augmentations.
+            # embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
+            # embedding_output += self.view_embeddings
+
+            # reshape embedding_output to (batch, view * num_patches, embedding_dim)
+            # embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)
+
+            # masking: length -> length * config.mask_ratio
+            embeddings, mask, ids_restore = self.random_masking(embedding_output)
         
-        # create patch embeddings and add position embeddings; remove CLS token
-        embedding_output = self.vit.embeddings(
-            x, bool_masked_pos=None, interpolate_pos_encoding=False,
-        )[:, 1:]
-        # shape: (batch * view, num_patches, embedding_dim)
-        
-        # # Add view embeddings to the sequence
-        # # @Yanchne: I removed view embeddings because it gives more augmentations.
-        # embedding_output = embedding_output.reshape(B, V, self.num_patches, self.hidden_size)
-        # embedding_output += self.view_embeddings
-
-        # reshape embedding_output to (batch, view * num_patches, embedding_dim)
-        # embedding_output = embedding_output.reshape(B, V * self.num_patches, self.hidden_size)
-
-        # masking: length -> length * config.mask_ratio
-        embeddings, mask, ids_restore = self.random_masking(embedding_output)
-
         # push data through vit encoder
         encoder_outputs = self.vit.encoder(
             embeddings,
