@@ -437,6 +437,7 @@ class MultiViewTransformer(torch.nn.Module):
         #   self.vit, self.decoder = load_mae_ckpt(MAE_VIT_SMALL_PATH, self.vit, self.decoder)
           self.vit, _ = load_mae_ckpt(self.pretrained_ckpt, self.vit, None)
           print('loaded vit-small-patch16-224.pth')
+          exit()
 
     def patchify(self, pixel_values):
         patch_size, num_channels = self.config.patch_size, self.config.decoder_num_channels
