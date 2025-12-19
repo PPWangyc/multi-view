@@ -12,7 +12,7 @@
 #SBATCH --export=ALL
 #SBATCH --priority=999999
 
-# fly-anipose, mirror-mouse-separate
+# fly-anipose, mirror-mouse-separate, chickadee
 dataset=$1
 # resnet50_animal_ap10k, vitb_imagenet, vits_dino, vitb_dino, vitb_dinov2, vitb_dinov3, vitb_sam | Use pretrained model
 # vitb-mv, vitb-sv, vitb-beast, vitb-beast-c, vitb-mvt, vits-mvt, vits-3d-mvt, vits-d-mvt, vitb-mae, vits-dinov3-mvt | Need to load pretrained model weights from checkpoint
@@ -28,6 +28,8 @@ if [ "$model_type" = "sv" ]; then
     model_type="heatmap"
 elif [ "$model_type" = "mv" ]; then
     model_type="heatmap_multiview_transformer"
+elif [ "$model_type" = "mva" ]; then # multiview aggregator
+    model_type="heatmap_multiview_aggregator"
 fi
 
 start_time=$(date +%s)

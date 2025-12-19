@@ -150,7 +150,7 @@ losses:
 
 eval:
   # predict? used in scripts/train_hydra.py
-  predict_vids_after_training: true
+  predict_vids_after_training: false
   # str with an absolute path to a directory containing videos for prediction.
   test_videos_directory: ${data.video_dir}
   # save labeled .mp4? used in scripts/train_hydra.py and scripts/predict_new_vids.py

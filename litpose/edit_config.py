@@ -100,6 +100,8 @@ def main(args):
         final_ratio = 0.0
     elif model_type == 'heatmap_multiview_transformer':
         final_ratio = 0.5
+    elif model_type == 'heatmap_multiview_aggregator':
+        final_ratio = 0.5
     else:
         raise ValueError(f"Unknown model type: {model_type}")
     # Add patch mask
