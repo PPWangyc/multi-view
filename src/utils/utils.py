@@ -149,7 +149,6 @@ def get_video_paths_by_id(directory_path):
     directory = Path(directory_path)
     # Find all MP4 files in the directory
     mp4_files = list(directory.glob('*.mp4'))
-    
     for mp4_file in mp4_files:
         filename = mp4_file.name
         if 'Cam-' in filename:
@@ -160,6 +159,12 @@ def get_video_paths_by_id(directory_path):
             # Pattern: *_view.downsampled.*.video_id.mp4
             # iblri dataset
             match = re.match(r'^(.+)_([^_]+)\.downsampled.*\.([^.]+)\.mp4$', filename)
+        elif '.short.mp4' in filename:
+            # chickadee dataset
+            # Pattern: {animal_id}_{date}_{time}_{view}.short.mp4
+            # Examples: PRL43_200617_131904_lBack.short.mp4, SLV151_200728_132004_rTop.short.mp4
+            # view: lBack, lFront, lTop, rBack, rFront, rTop
+            match = re.match(r'^([^_]+)_([^_]+)_([^_]+)_([^_]+)\.short\.mp4$', filename)
         else:
             # Extract video ID and view from filename
             # mirror-mouse-separate dataset
@@ -171,6 +176,10 @@ def get_video_paths_by_id(directory_path):
                 # For iblrig pattern: group(1) = prefix, group(2) = view, group(3) = video_id
                 video_id = match.group(3)  # e.g., "video_id"
                 view = match.group(2)      # e.g., "view"
+            elif '.short.mp4' in filename:
+                # For chickadee pattern: group(1) = animal_id, group(2) = date, group(3) = time, group(4) = view
+                video_id = f"{match.group(1)}_{match.group(2)}_{match.group(3)}"  # e.g., "PRL43_200617_131904"
+                view = match.group(4)      # e.g., "lBack"
             else:
                 # For other patterns: group(1) = video_id, group(2) = view
                 video_id = match.group(1)  # e.g., "180605_000"
@@ -232,6 +241,11 @@ def get_all_views_for_anchor(anchor_path, video_dict):
     elif 'iblrig' in anchor_path.name:
         # iblrig dataset
         match = re.match(r'^(.+)_([^_]+)\.downsampled.*\.([^.]+)\.mp4$', anchor_path.name)
+    elif '.short.mp4' in anchor_path.name:
+        # chickadee dataset
+        # Pattern: {animal_id}_{date}_{time}_{view}.short.mp4
+        # Examples: PRL43_200617_131904_lBack.short.mp4, SLV151_200728_132004_rTop.short.mp4
+        match = re.match(r'^([^_]+)_([^_]+)_([^_]+)_([^_]+)\.short\.mp4$', anchor_path.name)
     else:
         # mirror-mouse-separate dataset
         match = re.match(r'^(.+)_([^_]+)\.mp4$', anchor_path.name)
@@ -240,6 +254,9 @@ def get_all_views_for_anchor(anchor_path, video_dict):
         raise ValueError(f"Anchor path {anchor_path} does not match expected format")
     if 'iblrig' in anchor_path.name:
         video_id = match.group(3)
+    elif '.short.mp4' in anchor_path.name:
+        # chickadee dataset
+        video_id = f"{match.group(1)}_{match.group(2)}_{match.group(3)}"
     else:
         video_id = match.group(1)
     

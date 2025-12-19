@@ -48,6 +48,13 @@ def main():
         # get video paths only for anchor view
         anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
         print(len(anchor_video_paths))
+    elif dataset == 'chickadee':
+        # 11 videos, 6 views per video
+        # 6 * 11 * 1800 = 118800 frames
+        frames_per_video = 1800
+        anchor_view = 'lTop'
+        # get video paths only for anchor view
+        anchor_video_paths = get_anchor_view_paths(video_dict, anchor_view)
     else:
         raise ValueError(f'Dataset {dataset} not supported')
     total_frames = 0
