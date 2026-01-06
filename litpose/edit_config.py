@@ -59,7 +59,6 @@ def main(args):
     else:
         # Default to outputs directory in current working directory
         output_base_dir = os.path.join(base_dir, 'outputs')
-    
 
     # load learning rate from hyper_table.csv
     hyper_table_path = os.path.join(base_dir, 'configs', 'litpose', 'litpose_hyper.csv')
@@ -96,6 +95,9 @@ def main(args):
             litpose_config['model'] = {}
         litpose_config['model']['backbone_checkpoint'] = model_path
         print(f"Pretrained model path: {model_path}", file=sys.stderr)
+    elif model == 'vggt':
+        model = 'vitl_dinov2'
+        print(f"VGGT model detected, using {model} as the model", file=sys.stderr)
     if model_type == 'heatmap':
         final_ratio = 0.0
     elif model_type == 'heatmap_multiview_transformer':
