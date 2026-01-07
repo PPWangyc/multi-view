@@ -124,13 +124,13 @@ def main(args):
     
     # Update seed
     litpose_config['training']['rng_seed_data_pt'] = seed
-    litpose_config['training']['rng_seed_model_pt'] = seed
+    litpose_config['training']['rng_seed_model_pt'] = 0
     
     if 'dali' not in litpose_config:
         litpose_config['dali'] = {}
     if 'general' not in litpose_config['dali']:
         litpose_config['dali']['general'] = {}
-    litpose_config['dali']['general']['seed'] = seed
+    litpose_config['dali']['general']['seed'] = 0
     
     # Edit mode
     litpose_config['training']['unfreezing_epoch'] = unfreezing_epoch
