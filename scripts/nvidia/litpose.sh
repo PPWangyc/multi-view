@@ -43,6 +43,14 @@ conda activate mv
 pwd=$(pwd)
 export PYTHONPATH="${pwd}/src:${PYTHONPATH}"
 
+# Set TMPDIR to use /data filesystem to avoid running out of space on root filesystem
+# Create temp directory if it doesn't exist
+mkdir -p /data/tmp
+export TMPDIR=/data/tmp
+export TMP=/data/tmp
+export TEMP=/data/tmp
+echo "Temporary directory set to: $TMPDIR"
+
 # Set default values
 epochs=300
 mode=ft
@@ -117,7 +125,7 @@ if [ "$num_processes" -gt 1 ]; then
     echo "MASTER_PORT=$MASTER_PORT, MASTER_ADDR=$MASTER_ADDR"
     # Create a temporary Python wrapper script to launch litpose
     # This is needed because torchrun expects a Python script, not a CLI command
-    wrapper_script=$(mktemp /tmp/litpose_wrapper_XXXXXX.py)
+    wrapper_script=$(mktemp ${TMPDIR}/litpose_wrapper_XXXXXX.py)
     cat > "$wrapper_script" << EOF
 import subprocess
 import sys

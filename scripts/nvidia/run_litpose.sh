@@ -17,7 +17,7 @@ train_frame=$4
 # Loop through seeds [0, 1, 2]
 for seed in 0 1 2; do
     echo "Submitting job for seed=$seed"
-    if [ "$model" = "vggt" ]; then
+    if [ "$model" = "vggt" ] || [[ "$model" == *"vitl"* ]]; then
         sbatch --gpus=2 --gpus-per-task=2 --cpus-per-task=64 --mem=256g litpose.sh $dataset $model $model_type $train_frame $seed
     else
         sbatch litpose.sh $dataset $model $model_type $train_frame $seed
